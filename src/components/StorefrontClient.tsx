@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { 
   Flame, 
@@ -264,48 +264,65 @@ export default function StorefrontClient({
     return "⚡";
   };
 
-  // Calcular precio inicial más bajo en una categoría
-  const getCategoryMinPrice = (catId: string) => {
-    const catProds = productsList.filter((p) => p.categoria_id === catId);
-    const prices: number[] = [];
-    catProds.forEach((p) => {
-      if (p.precio_base && Number(p.precio_base) > 0) {
-        prices.push(Number(p.precio_base));
-      }
-      const pVars = variantsList.filter((v) => v.producto_id === p.id && v.activo !== false);
-      pVars.forEach((v) => {
-        if (v.precio_base && Number(v.precio_base) > 0) {
-          prices.push(Number(v.precio_base));
+  // Precalcular estadísticas y precios mínimos de categorías en un solo paso memoizado
+  const categoryStats = useMemo(() => {
+    const stats: Record<string, { prodsCount: number; minPrice: number | null }> = {};
+    for (const cat of categoriesList) {
+      const catProds = productsList.filter((p) => p.categoria_id === cat.id);
+      const prices: number[] = [];
+      for (const p of catProds) {
+        if (p.precio_base && Number(p.precio_base) > 0) prices.push(Number(p.precio_base));
+        const pVars = variantsList.filter((v) => v.producto_id === p.id && v.activo !== false);
+        for (const v of pVars) {
+          if (v.precio_base && Number(v.precio_base) > 0) prices.push(Number(v.precio_base));
         }
-      });
+      }
+      stats[cat.id] = {
+        prodsCount: catProds.length,
+        minPrice: prices.length > 0 ? Math.min(...prices) : null,
+      };
+    }
+    return stats;
+  }, [categoriesList, productsList, variantsList]);
+
+  const activeCategoryObj = useMemo(
+    () => categoriesList.find((c) => c.id === activeCategoryFilter),
+    [categoriesList, activeCategoryFilter]
+  );
+
+  // Subcategorías disponibles según la categoría seleccionada (memoizado)
+  const availableSubcategories = useMemo(() => {
+    return subcategoriesList.filter((s) => {
+      if (activeCategoryFilter === "all") return true;
+      return s.categoria_id === activeCategoryFilter;
     });
-    return prices.length > 0 ? Math.min(...prices) : null;
-  };
+  }, [subcategoriesList, activeCategoryFilter]);
 
-  const activeCategoryObj = categoriesList.find((c) => c.id === activeCategoryFilter);
+  // Filtrado de productos por categoría y subcategoría desde BD (memoizado)
+  const filteredProducts = useMemo(() => {
+    return productsList.filter((p) => {
+      if (activeCategoryFilter !== "all" && p.categoria_id !== activeCategoryFilter) {
+        return false;
+      }
+      if (activeSubcategoryFilter !== "all" && p.subcategoria_id !== activeSubcategoryFilter) {
+        return false;
+      }
+      return true;
+    });
+  }, [productsList, activeCategoryFilter, activeSubcategoryFilter]);
 
-  // Subcategorías disponibles según la categoría seleccionada
-  const availableSubcategories = subcategoriesList.filter((s) => {
-    if (activeCategoryFilter === "all") return true;
-    return s.categoria_id === activeCategoryFilter;
-  });
-
-  // Filtrado de productos por categoría y subcategoría desde BD
-  const filteredProducts = productsList.filter((p) => {
-    if (activeCategoryFilter !== "all" && p.categoria_id !== activeCategoryFilter) {
-      return false;
-    }
-    if (activeSubcategoryFilter !== "all" && p.subcategoria_id !== activeSubcategoryFilter) {
-      return false;
-    }
-    return true;
-  });
-
-  // Ofertas especiales configuradas desde el Panel Admin
-  const specialOffers = productsList.filter((p) => p.oferta_especial);
+  // Ofertas especiales configuradas desde el Panel Admin (memoizado)
+  const specialOffers = useMemo(() => {
+    return productsList.filter((p) => p.oferta_especial);
+  }, [productsList]);
 
   return (
-    <div className="bg-ferrari-dominant escarchado-dorado min-h-screen text-white relative selection:bg-[#FF007F] selection:text-white pb-24 overflow-x-hidden">
+    <div className="min-h-screen text-white relative selection:bg-[#FF007F] selection:text-white pb-24 overflow-x-hidden">
+      {/* Fondo Fijo Acelerado por Hardware GPU (elimina 100% de repintados durante el scroll en móviles) */}
+      <div 
+        aria-hidden="true" 
+        className="fixed inset-0 pointer-events-none -z-10 bg-ferrari-dominant escarchado-dorado transform-gpu will-change-transform" 
+      />
       
       {/* ========================================================================= */}
       {/* 1. BARRA SUPERIOR FLOTANTE (CONSERVADA SEGÚN CAPTURA DEL USUARIO) */}
@@ -675,6 +692,8 @@ export default function StorefrontClient({
                           <img 
                             src={promoImage} 
                             alt={offer.nombre} 
+                            loading="lazy"
+                            decoding="async"
                             className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
                           />
                           <div className="absolute inset-0 bg-gradient-to-t from-black via-black/75 to-black/35 group-hover:via-black/65 transition-colors" />
@@ -685,12 +704,14 @@ export default function StorefrontClient({
 
                       {/* Header de la Tarjeta de Oferta */}
                       <div className="relative z-10 flex items-start justify-between gap-2">
-                        <div className="flex items-center gap-2 bg-black/60 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/10">
+                        <div className="flex items-center gap-2 bg-black/80 px-2.5 py-1 rounded-full border border-white/10">
                           {offer.imagen_url ? (
                             /* eslint-disable-next-line @next/next/no-img-element */
                             <img 
                               src={offer.imagen_url} 
                               alt="" 
+                              loading="lazy"
+                              decoding="async"
                               className="w-4 h-4 rounded-full object-cover" 
                             />
                           ) : (
@@ -701,7 +722,7 @@ export default function StorefrontClient({
                           </span>
                         </div>
 
-                        <span className="px-2.5 py-1 rounded-full bg-gradient-to-r from-[#FF007F] to-[#D61A1A] text-white text-[11px] font-black tracking-wider shadow-lg flex items-center gap-1 animate-pulse">
+                        <span className="px-2.5 py-1 rounded-full bg-gradient-to-r from-[#FF007F] to-[#D61A1A] text-white text-[11px] font-black tracking-wider shadow-lg flex items-center gap-1">
                           <span>🔥 PROMO</span>
                         </span>
                       </div>
@@ -855,9 +876,8 @@ export default function StorefrontClient({
             <div className="space-y-6">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 {categoriesList.map((cat) => {
-                  const catProds = productsList.filter((p) => p.categoria_id === cat.id);
                   const catSubs = subcategoriesList.filter((s) => s.categoria_id === cat.id);
-                  const minPrice = getCategoryMinPrice(cat.id);
+                  const stats = categoryStats[cat.id] || { prodsCount: 0, minPrice: null };
 
                   return (
                     <div
@@ -876,6 +896,8 @@ export default function StorefrontClient({
                             <img
                               src={cat.imagen_url}
                               alt={cat.nombre}
+                              loading="lazy"
+                              decoding="async"
                               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
                             />
                             <div className="absolute inset-0 bg-gradient-to-t from-[#0B0D13] via-[#0B0D13]/60 to-black/30" />
@@ -891,13 +913,13 @@ export default function StorefrontClient({
 
                         {/* Badges superiores */}
                         <div className="absolute top-3.5 left-3.5 right-3.5 flex items-center justify-between z-10">
-                          <div className="flex items-center gap-1.5 bg-black/70 backdrop-blur-md px-3 py-1 rounded-full border border-white/15 text-xs font-mono font-bold text-white shadow">
+                          <div className="flex items-center gap-1.5 bg-black/80 px-3 py-1 rounded-full border border-white/15 text-xs font-mono font-bold text-white shadow">
                             <span>{getCategoryIcon(cat.nombre)}</span>
                             <span className="uppercase tracking-wider">Categoría</span>
                           </div>
 
                           <span className="px-2.5 py-1 rounded-full bg-gradient-to-r from-[#FF007F] to-[#D61A1A] text-white text-[11px] font-black tracking-wider shadow font-mono">
-                            {catProds.length} {catProds.length === 1 ? "Producto" : "Productos"}
+                            {stats.prodsCount} {stats.prodsCount === 1 ? "Producto" : "Productos"}
                           </span>
                         </div>
 
@@ -924,7 +946,7 @@ export default function StorefrontClient({
                                 >
                                   {sub.imagen_url ? (
                                     /* eslint-disable-next-line @next/next/no-img-element */
-                                    <img src={sub.imagen_url} alt="" className="w-3.5 h-3.5 rounded object-cover" />
+                                    <img src={sub.imagen_url} alt="" loading="lazy" decoding="async" className="w-3.5 h-3.5 rounded object-cover" />
                                   ) : (
                                     <span className="text-[10px] text-[#FFF01F]">★</span>
                                   )}
@@ -944,7 +966,7 @@ export default function StorefrontClient({
                               Precios ({currentCurrency})
                             </span>
                             <span className="text-base font-black text-[#FFF01F] font-mono">
-                              {minPrice !== null ? `Desde ${formatPrice(minPrice)}` : "Disponible"}
+                              {stats.minPrice !== null ? `Desde ${formatPrice(stats.minPrice)}` : "Disponible"}
                             </span>
                           </div>
 
@@ -1092,6 +1114,8 @@ export default function StorefrontClient({
                             <img 
                               src={prod.imagen_url} 
                               alt={prod.nombre} 
+                              loading="lazy"
+                              decoding="async"
                               className="w-14 h-14 rounded-xl object-cover shadow-md border border-white/10 shrink-0" 
                             />
                           ) : (
@@ -1130,6 +1154,8 @@ export default function StorefrontClient({
                                       <img 
                                         src={v.imagen_url} 
                                         alt={v.nombre} 
+                                        loading="lazy"
+                                        decoding="async"
                                         className="w-7 h-7 rounded-lg object-cover border border-white/10 shrink-0" 
                                       />
                                     ) : (

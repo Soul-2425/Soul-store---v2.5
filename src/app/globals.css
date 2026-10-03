@@ -34,6 +34,9 @@ body {
   overflow-x: hidden;
   margin: 0;
   padding: 0;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+  text-rendering: optimizeSpeed;
 }
 
 /* Fondo Rojo Ferrari Brillante con destellos de Amarillo Pollito (Dominando el Rojo) */
@@ -43,8 +46,8 @@ body {
     radial-gradient(circle at 90% 25%, rgba(255, 26, 26, 0.95) 0%, rgba(214, 26, 26, 0.9) 40%, transparent 65%),
     radial-gradient(circle at 50% 65%, rgba(230, 0, 0, 0.98) 0%, rgba(160, 0, 0, 0.98) 75%),
     linear-gradient(135deg, #FFE600 0%, #FF1A1A 20%, #E60000 45%, #D61A1A 70%, #990000 100%);
-  background-attachment: fixed;
   background-size: cover;
+  background-position: center;
 }
 
 /* Escarchado Dorado / Golden Sparkle Glitter Shimmer */
@@ -64,22 +67,32 @@ body {
 /* Barra Superior Flotante y Paneles de Vidrio Esmerilado */
 .glass-pill {
   background: rgba(11, 13, 19, 0.88);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.14);
 }
 
 .glass-card-dark {
-  background: rgba(11, 13, 19, 0.72);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  background: rgba(11, 13, 19, 0.84);
   border: 1px solid rgba(255, 255, 255, 0.15);
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  contain: content;
+  content-visibility: auto;
+  contain-intrinsic-size: 0 220px;
+  transform: translateZ(0);
+  transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+@media (min-width: 768px) {
+  .glass-card-dark {
+    background: rgba(11, 13, 19, 0.74);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
 }
 
 .glass-card-dark:hover {
   border-color: rgba(255, 240, 31, 0.6);
-  box-shadow: 0 10px 30px -8px rgba(0, 0, 0, 0.7), 0 0 20px -2px rgba(255, 0, 127, 0.35);
+  box-shadow: 0 10px 26px -8px rgba(0, 0, 0, 0.65), 0 0 16px -2px rgba(255, 0, 127, 0.3);
   transform: translateY(-2px);
 }
 
