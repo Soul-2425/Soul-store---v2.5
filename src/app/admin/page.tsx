@@ -430,6 +430,7 @@ export default function AdminDashboardPage() {
 
   // Formularios de creación simples auxiliares
   const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [showProductModal, setShowProductModal] = useState(false);
 
   const [catName, setCatName] = useState("");
@@ -1166,15 +1167,21 @@ export default function AdminDashboardPage() {
     setTimeout(() => setStatusMessage(null), 4000);
   };
 
-  // Crear categoría
+  // Crear o actualizar categoría
   const handleCreateCategory = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!catName.trim()) return;
 
     try {
       setActionLoading(true);
-      const res = await fetch("/api/admin/categories", {
-        method: "POST",
+      const isEditing = !!editingCategory;
+      const url = isEditing
+        ? `/api/admin/categories/${editingCategory.id}`
+        : "/api/admin/categories";
+      const method = isEditing ? "PATCH" : "POST";
+
+      const res = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           nombre: catName.trim(),
@@ -1184,17 +1191,23 @@ export default function AdminDashboardPage() {
       });
 
       if (res.ok) {
-        showNotification("success", `Categoría "${catName}" creada en la base de datos.`);
+        showNotification(
+          "success",
+          isEditing
+            ? `Categoría "${catName}" actualizada con éxito.`
+            : `Categoría "${catName}" creada en la base de datos.`
+        );
         setCatName("");
         setCatImageUrl("");
+        setEditingCategory(null);
         setShowCategoryModal(false);
         fetchCatalogData();
       } else {
         const error = await res.json();
-        showNotification("error", error.error || "No se pudo crear la categoría");
+        showNotification("error", error.error || "No se pudo guardar la categoría");
       }
     } catch (err) {
-      showNotification("error", "Error de conexión al crear categoría");
+      showNotification("error", "Error de conexión al guardar categoría");
     } finally {
       setActionLoading(false);
     }
@@ -2222,6 +2235,7 @@ export default function AdminDashboardPage() {
                 {/* Botón rápido auxiliar para categoría */}
                 <button
                   onClick={() => {
+                    setEditingCategory(null);
                     setCatActive(true);
                     setCatName("");
                     setCatImageUrl("");
@@ -2443,13 +2457,28 @@ export default function AdminDashboardPage() {
                             </div>
                           </div>
 
-                          <button
-                            onClick={() => handleDeleteCategory(cat)}
-                            title="Eliminar categoría"
-                            className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-950/40 transition shrink-0"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              onClick={() => {
+                                setEditingCategory(cat);
+                                setCatName(cat.nombre);
+                                setCatImageUrl(cat.imagen_url || "");
+                                setCatActive(cat.activo);
+                                setShowCategoryModal(true);
+                              }}
+                              title="Editar categoría e imagen"
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-fuchsia-400 hover:bg-slate-800 transition"
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteCategory(cat)}
+                              title="Eliminar categoría"
+                              className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-950/40 transition"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
                         </div>
 
                         {/* Subcategorías dentro de esta categoría */}
@@ -5132,7 +5161,7 @@ export default function AdminDashboardPage() {
           <div className="glass-panel w-full max-w-md p-6 rounded-3xl border border-fuchsia-500/30 space-y-4 shadow-2xl">
             <h3 className="font-bold text-white text-lg flex items-center gap-2">
               <FolderPlus className="w-5 h-5 text-fuchsia-400" />
-              <span>Crear Nueva Categoría</span>
+              <span>{editingCategory ? "Editar Categoría" : "Crear Nueva Categoría"}</span>
             </h3>
 
             <form onSubmit={handleCreateCategory} className="space-y-4">
@@ -5179,7 +5208,11 @@ export default function AdminDashboardPage() {
                   disabled={actionLoading}
                   className="px-5 py-2.5 rounded-xl bg-fuchsia-600 hover:bg-fuchsia-500 text-white font-bold text-xs shadow-glow transition disabled:opacity-50"
                 >
-                  {actionLoading ? "Guardando en BD..." : "Crear Categoría"}
+                  {actionLoading
+                    ? "Guardando en BD..."
+                    : editingCategory
+                    ? "Guardar Cambios"
+                    : "Crear Categoría"}
                 </button>
               </div>
             </form>

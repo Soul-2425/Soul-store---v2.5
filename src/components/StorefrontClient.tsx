@@ -137,10 +137,16 @@ function MobileOffersCarousel({
   formatPrice: (price: number, item?: any) => string; 
 }) {
   const [activeIdx, setActiveIdx] = useState(0);
+  const [imgError, setImgError] = useState(false);
   const currentOffer = offers[activeIdx] || offers[0];
-  const promoImg = currentOffer?.imagen_oferta_url || currentOffer?.imagen_url || "https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=600&q=80";
+
+  useEffect(() => {
+    setImgError(false);
+  }, [activeIdx, currentOffer?.id]);
 
   if (!currentOffer) return null;
+
+  const promoImg = currentOffer?.imagen_oferta_url || currentOffer?.imagen_url;
 
   return (
     <div className="space-y-3">
@@ -148,15 +154,26 @@ function MobileOffersCarousel({
         onClick={() => onSelect(currentOffer)}
         className="group relative h-48 rounded-3xl overflow-hidden border border-white/15 shadow-2xl p-4 flex flex-col justify-between cursor-pointer bg-[#12141D]"
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img 
-          src={promoImg} 
-          alt={currentOffer.nombre} 
-          loading="lazy"
-          decoding="async"
-          className="absolute inset-0 w-full h-full object-cover"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/75 to-black/35" />
+        {/* Imagen configurada en Admin o fondo elegante si no tiene */}
+        {promoImg && !imgError ? (
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img 
+              src={promoImg} 
+              alt={currentOffer.nombre} 
+              loading="lazy"
+              decoding="async"
+              onError={() => setImgError(true)}
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/75 to-black/35" />
+          </>
+        ) : (
+          <>
+            <div className="absolute inset-0 bg-gradient-to-br from-[#1d1428] via-[#10121a] to-[#08090e]" />
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,0,127,0.22),transparent_60%)]" />
+          </>
+        )}
 
         <div className="relative z-10 flex items-center justify-between">
           <span className="px-2.5 py-1 rounded-full bg-black/80 border border-white/10 text-white text-[11px] font-bold font-mono">
@@ -169,7 +186,7 @@ function MobileOffersCarousel({
 
         <div className="relative z-10 mt-auto">
           <span className="text-[11px] font-mono text-[#FF007F] font-bold uppercase tracking-wider block">
-            {currentOffer.subcategoria_nombre || "FREE FIRE"}
+            {currentOffer.subcategoria_nombre || "General"}
           </span>
           <p className="text-base font-black text-white leading-tight">
             {currentOffer.nombre}
@@ -187,21 +204,23 @@ function MobileOffersCarousel({
         </div>
       </div>
 
-      {/* Indicadores de Paginación Móvil */}
-      <div className="flex items-center justify-center gap-2 pt-1">
-        {offers.map((_, idx) => (
-          <button
-            key={idx}
-            onClick={(e) => { e.stopPropagation(); setActiveIdx(idx); }}
-            className={`rounded-full transition-all ${
-              activeIdx === idx
-                ? "w-4 h-2 bg-[#D61A1A] shadow-[0_0_8px_#D61A1A]"
-                : "w-2 h-2 bg-white/30"
-            }`}
-            aria-label={`Ver oferta ${idx + 1}`}
-          />
-        ))}
-      </div>
+      {/* Indicadores de Paginación Móvil: solo si hay más de 1 oferta configurada */}
+      {offers.length > 1 && (
+        <div className="flex items-center justify-center gap-2 pt-1">
+          {offers.map((_, idx) => (
+            <button
+              key={idx}
+              onClick={(e) => { e.stopPropagation(); setActiveIdx(idx); }}
+              className={`rounded-full transition-all ${
+                activeIdx === idx
+                  ? "w-4 h-2 bg-[#D61A1A] shadow-[0_0_8px_#D61A1A]"
+                  : "w-2 h-2 bg-white/30"
+              }`}
+              aria-label={`Ver oferta ${idx + 1}`}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -408,46 +427,9 @@ export default function StorefrontClient({
     });
   }, [productsList, activeCategoryFilter, activeSubcategoryFilter]);
 
-  // Lista de exactamente 4 ofertas especiales para PC (o las configuradas en BD)
+  // Solo los productos marcados como oferta especial desde el Panel de Administración
   const specialOffersList = useMemo(() => {
-    const dbOffers = productsList.filter((p) => p.oferta_especial);
-    const nonOffers = productsList.filter((p) => !p.oferta_especial);
-
-    // Asegurar 4 elementos para llenar exactamente el cuadro en PC
-    const combined = [...dbOffers];
-    for (const prod of nonOffers) {
-      if (combined.length >= 4) break;
-      combined.push(prod);
-    }
-
-    // Fallbacks si la base de datos tiene menos de 4 productos en total
-    if (combined.length === 0) {
-      combined.push({
-        id: "mock-1",
-        nombre: "Free Fire 100+10 Diamantes",
-        slug: "free-fire-100-10",
-        descripcion: "Recarga directa por Player ID",
-        imagen_url: "https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=600&q=80",
-        precio_base: 0.95,
-        oferta_especial: true,
-        categoria_id: "gaming",
-        categoria_nombre: "Gaming",
-        subcategoria_nombre: "Free Fire"
-      });
-    }
-
-    // Si aún faltan para llegar a 4 en PC, duplicar referencias con variantes o mocks
-    while (combined.length < 4) {
-      const base = combined[combined.length % combined.length];
-      combined.push({
-        ...base,
-        id: `${base.id}-copy-${combined.length}`,
-        nombre: combined.length === 1 ? "Pase Booyah / Premium" : combined.length === 2 ? "Mobile Legends 86+8" : "Roblox 400 Robux",
-        precio_base: combined.length === 1 ? 2.00 : combined.length === 2 ? 1.50 : 4.99,
-      });
-    }
-
-    return combined.slice(0, 4);
+    return productsList.filter((p) => p.oferta_especial === true);
   }, [productsList]);
 
   return (
@@ -792,71 +774,101 @@ export default function StorefrontClient({
             </div>
 
             {/* ============================================================== */}
-            {/* VISTA PC: UN CUADRO GRANDE CONTENIENDO LOS 4 CUADROS DE OFERTA */}
+            {/* VISTA PC: UN CUADRO GRANDE CONTENIENDO LOS CUADROS DE OFERTAS  */}
             {/* ============================================================== */}
             <div className="hidden sm:block p-4 sm:p-5 rounded-3xl bg-[#0B0D13]/85 border border-white/15 backdrop-blur-md shadow-2xl relative overflow-hidden">
-              <div className="grid grid-cols-2 gap-3.5">
-                {specialOffersList.map((offer) => {
-                  const promoImage = offer.imagen_oferta_url || offer.imagen_url || "https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=600&q=80";
+              {specialOffersList.length === 0 ? (
+                <div className="py-12 text-center text-zinc-400">
+                  <p className="text-sm">No hay ofertas especiales activas configuradas en el panel admin.</p>
+                </div>
+              ) : (
+                <div className={`grid gap-3.5 ${
+                  specialOffersList.length === 1 
+                    ? "grid-cols-1 max-w-sm mx-auto" 
+                    : "grid-cols-2"
+                }`}>
+                  {specialOffersList.map((offer) => {
+                    const promoImage = offer.imagen_oferta_url || offer.imagen_url;
 
-                  return (
-                    <div
-                      key={offer.id}
-                      onClick={() => setSelectedProduct(offer)}
-                      className="group relative h-44 rounded-2xl overflow-hidden border border-white/15 hover:border-[#FFF01F] transition-all duration-300 cursor-pointer shadow-xl flex flex-col justify-between p-3.5 bg-[#12141D]"
-                    >
-                      {/* Imagen de Fondo de la Oferta */}
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img 
-                        src={promoImage} 
-                        alt={offer.nombre} 
-                        loading="lazy"
-                        decoding="async"
-                        className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black via-black/75 to-black/35 group-hover:via-black/60 transition-colors" />
+                    return (
+                      <div
+                        key={offer.id}
+                        onClick={() => setSelectedProduct(offer)}
+                        className="group relative h-44 rounded-2xl overflow-hidden border border-white/15 hover:border-[#FFF01F] transition-all duration-300 cursor-pointer shadow-xl flex flex-col justify-between p-3.5 bg-[#12141D]"
+                      >
+                        {/* Imagen de Fondo de la Oferta configurada en Admin o gradiente elegante */}
+                        {promoImage ? (
+                          <>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img 
+                              src={promoImage} 
+                              alt={offer.nombre} 
+                              loading="lazy"
+                              decoding="async"
+                              onError={(e) => {
+                                (e.currentTarget as HTMLImageElement).style.display = "none";
+                              }}
+                              className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/75 to-black/35 group-hover:via-black/60 transition-colors" />
+                          </>
+                        ) : (
+                          <>
+                            <div className="absolute inset-0 bg-gradient-to-br from-[#1c1829] via-[#10121a] to-[#07080c]" />
+                            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,0,127,0.22),transparent_60%)]" />
+                          </>
+                        )}
 
-                      {/* Badges superiores: GAMING + PROMO */}
-                      <div className="relative z-10 flex items-center justify-between gap-1">
-                        <span className="px-2 py-0.5 rounded-full bg-black/80 border border-white/10 text-white text-[10px] font-bold font-mono uppercase tracking-wider">
-                          ✦ {offer.categoria_nombre || "Gaming"}
-                        </span>
-                        <span className="px-2 py-0.5 rounded-full bg-[#FF007F] text-white text-[10px] font-black uppercase tracking-wider shadow">
-                          ▶ PROMO
-                        </span>
-                      </div>
-
-                      {/* Datos y Botón Comprar */}
-                      <div className="relative z-10 mt-auto">
-                        <span className="text-[10px] font-mono text-[#FF007F] font-bold uppercase tracking-wider block">
-                          {offer.subcategoria_nombre || "FREE FIRE"}
-                        </span>
-                        <p className="text-sm font-black text-white group-hover:text-[#FFF01F] transition-colors leading-tight truncate">
-                          {offer.nombre}
-                        </p>
-
-                        <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-white/15">
-                          <span className="text-xs font-black text-[#FFF01F] font-mono">
-                            {formatPrice(offer.precio_base, offer)}
+                        {/* Badges superiores: CATEGORIA + PROMO */}
+                        <div className="relative z-10 flex items-center justify-between gap-1">
+                          <span className="px-2 py-0.5 rounded-full bg-black/80 border border-white/10 text-white text-[10px] font-bold font-mono uppercase tracking-wider">
+                            ✦ {offer.categoria_nombre || "Gaming"}
                           </span>
-                          <button className="px-3 py-1 rounded-full bg-white text-black font-bold text-[11px] group-hover:bg-[#FFF01F] transition-all shadow flex items-center gap-1">
-                            <span>Comprar</span>
-                            <span>&rarr;</span>
-                          </button>
+                          <span className="px-2 py-0.5 rounded-full bg-[#FF007F] text-white text-[10px] font-black uppercase tracking-wider shadow">
+                            ▶ PROMO
+                          </span>
+                        </div>
+
+                        {/* Datos y Botón Comprar */}
+                        <div className="relative z-10 mt-auto">
+                          <span className="text-[10px] font-mono text-[#FF007F] font-bold uppercase tracking-wider block">
+                            {offer.subcategoria_nombre || "General"}
+                          </span>
+                          <p className="text-sm font-black text-white group-hover:text-[#FFF01F] transition-colors leading-tight truncate">
+                            {offer.nombre}
+                          </p>
+
+                          <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-white/15">
+                            <span className="text-xs font-black text-[#FFF01F] font-mono">
+                              {formatPrice(offer.precio_base, offer)}
+                            </span>
+                            <button className="px-3 py-1 rounded-full bg-white text-black font-bold text-[11px] group-hover:bg-[#FFF01F] transition-all shadow flex items-center gap-1">
+                              <span>Comprar</span>
+                              <span>&rarr;</span>
+                            </button>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
+              )}
 
-              {/* Paginación de 4 puntos debajo del cuadro en PC */}
-              <div className="flex items-center justify-center gap-2 mt-4">
-                <span className="w-2.5 h-2.5 rounded-full bg-[#D61A1A] shadow-[0_0_8px_#D61A1A]"></span>
-                <span className="w-2 h-2 rounded-full bg-white/30"></span>
-                <span className="w-2 h-2 rounded-full bg-white/30"></span>
-                <span className="w-2 h-2 rounded-full bg-white/30"></span>
-              </div>
+              {/* Paginación de puntos debajo del cuadro en PC - solo si hay más de 1 oferta configurada */}
+              {specialOffersList.length > 1 && (
+                <div className="flex items-center justify-center gap-2 mt-4">
+                  {specialOffersList.map((_, idx) => (
+                    <span 
+                      key={idx} 
+                      className={`rounded-full transition-all ${
+                        idx === 0
+                          ? "w-2.5 h-2.5 bg-[#D61A1A] shadow-[0_0_8px_#D61A1A]"
+                          : "w-2 h-2 bg-white/30"
+                      }`} 
+                    />
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* ============================================================== */}
@@ -958,11 +970,27 @@ export default function StorefrontClient({
                     </span>
                   </div>
 
-                  {/* Centro de la Tarjeta: Icono Representativo con Glow Suave */}
+                  {/* Centro de la Tarjeta: Imagen configurada en Admin o Icono */}
                   <div className="my-auto flex items-center justify-center">
-                    <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center group-hover:scale-110 group-hover:border-[#FF007F]/40 transition-all duration-300 shadow-inner">
-                      {getCategoryIconComponent(cat.nombre)}
-                    </div>
+                    {cat.imagen_url ? (
+                      <div className="w-16 h-16 rounded-2xl overflow-hidden border border-white/15 group-hover:scale-110 group-hover:border-[#FF007F]/60 transition-all duration-300 shadow-xl bg-black/40 relative">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={cat.imagen_url}
+                          alt={cat.nombre}
+                          loading="lazy"
+                          decoding="async"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).style.display = "none";
+                          }}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    ) : (
+                      <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center group-hover:scale-110 group-hover:border-[#FF007F]/40 transition-all duration-300 shadow-inner">
+                        {getCategoryIconComponent(cat.nombre)}
+                      </div>
+                    )}
                   </div>
 
                   {/* Pie de la Tarjeta: Nombre de la Categoría y Cantidad */}
@@ -1066,6 +1094,15 @@ export default function StorefrontClient({
                         : "bg-white/10 hover:bg-white/20 text-white/80"
                     }`}
                   >
+                    {sub.imagen_url && (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img 
+                        src={sub.imagen_url} 
+                        alt="" 
+                        className="w-4 h-4 rounded-full object-cover shrink-0" 
+                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                      />
+                    )}
                     <span>{sub.nombre}</span>
                   </button>
                 ))}
