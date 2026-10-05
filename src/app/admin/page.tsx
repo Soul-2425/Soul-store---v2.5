@@ -3937,9 +3937,20 @@ export default function AdminDashboardPage() {
                         {showFfKeyPlain ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
                     </div>
-                    <p className="text-[11px] text-slate-400">
-                      Esta clave se mantiene segura en el servidor y nunca se expone a los clientes.
-                    </p>
+                    <div className="flex items-center justify-between pt-1">
+                      <p className="text-[11px] text-slate-400">
+                        Esta clave se mantiene segura en el servidor y nunca se expone a los clientes.
+                      </p>
+                      <a
+                        href="https://telegram.me/SiamBhau?text=https%3A%2F%2Fsiambhau69.eu.cc%0A%0AHi%20%40SiamBhau%20%F0%9F%91%8B%2C%20I'd%20like%20to%20get%20a%20FREE%20API%20key%20for%20the%20Free%20Fire%20Info%20endpoints.%20Could%20you%20please%20activate%20one%20for%20me%3F%20%F0%9F%99%8F"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 text-[11px] font-mono text-cyan-400 hover:text-cyan-300 hover:underline"
+                      >
+                        <span>Pedir clave gratis en Telegram (@SiamBhau)</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
                   </div>
 
                   {/* URL Base */}
@@ -3983,7 +3994,7 @@ export default function AdminDashboardPage() {
                       <option value="VN">VN - Vietnam</option>
                     </select>
                     <p className="text-[11px] text-slate-400">
-                      El cliente también puede cambiar la región en la ventana de pago si juega en otro servidor.
+                      Región inicial de búsqueda. El sistema auto-detecta la región exacta de la cuenta recorriendo los servidores oficiales.
                     </p>
                   </div>
 

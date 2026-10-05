@@ -148,12 +148,21 @@ export default function CheckoutModal({
   const [ffPlayer, setFfPlayer] = useState<{
     nickname: string;
     level?: string | number;
+    exp?: number;
     region: string;
     uid: string;
     likes?: number;
     avatarUrl?: string;
+    bannerUrl?: string;
     clanName?: string;
+    clanLevel?: number;
     headPic?: number | string | null;
+    rankingPoints?: number;
+    rank?: number;
+    csRank?: number;
+    csRankingPoints?: number;
+    signature?: string;
+    creditScore?: number;
   } | null>(null);
   const [ffError, setFfError] = useState<string | null>(null);
 
@@ -784,11 +793,39 @@ export default function CheckoutModal({
                             <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 pt-0.5">
                               <span>UID: <strong className="text-white">{playerId}</strong></span>
                               {ffPlayer.clanName && (
-                                <span className="text-slate-300 truncate max-w-[130px]" title={ffPlayer.clanName}>
-                                  🛡️ {ffPlayer.clanName}
+                                <span className="text-slate-300 truncate max-w-[140px]" title={ffPlayer.clanName}>
+                                  🛡️ {ffPlayer.clanName} {ffPlayer.clanLevel ? `(Nv. ${ffPlayer.clanLevel})` : ""}
                                 </span>
                               )}
                             </div>
+
+                            {/* Puntos de Rango BR y CS si están disponibles */}
+                            {(ffPlayer.rankingPoints || ffPlayer.csRankingPoints) && (
+                              <div className="flex items-center gap-2 pt-1 text-[10px] font-mono text-slate-300 border-t border-emerald-500/15">
+                                {ffPlayer.rankingPoints && (
+                                  <span className="text-amber-400">
+                                    🏆 BR: <strong className="text-white">{ffPlayer.rankingPoints.toLocaleString()}</strong> pts
+                                  </span>
+                                )}
+                                {ffPlayer.csRankingPoints && (
+                                  <span className="text-cyan-400">
+                                    ⚡ CS: <strong className="text-white">{ffPlayer.csRankingPoints.toLocaleString()}</strong> pts
+                                  </span>
+                                )}
+                                {ffPlayer.creditScore && (
+                                  <span className="text-emerald-400 ml-auto">
+                                    ✨ {ffPlayer.creditScore}/100 Honor
+                                  </span>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Firma / Bio del jugador */}
+                            {ffPlayer.signature && (
+                              <div className="text-[10px] italic text-slate-400 truncate pt-0.5" title={ffPlayer.signature}>
+                                💬 &ldquo;{ffPlayer.signature}&rdquo;
+                              </div>
+                            )}
                           </div>
                         </div>
 

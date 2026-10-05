@@ -32,13 +32,23 @@ export async function GET(request: Request) {
     if (apiKey && uid) {
       try {
         const cleanBaseUrl = apiUrl.replace(/\/+$/, "");
-        // Intentar obtener el PNG del outfit del jugador
-        const outfitUrl = `${cleanBaseUrl}/outfits/outfit?uid=${encodeURIComponent(uid)}&region=${encodeURIComponent(region)}&key=${encodeURIComponent(apiKey)}`;
+        
+        // 1. Intentar obtener el banner oficial de perfil (/banner/profile)
+        const bannerUrl = `${cleanBaseUrl}/banner/profile?uid=${encodeURIComponent(uid)}&region=${encodeURIComponent(region)}&key=${encodeURIComponent(apiKey)}`;
         
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 4000);
-        const imgRes = await fetch(outfitUrl, { signal: controller.signal });
+        let imgRes = await fetch(bannerUrl, { signal: controller.signal });
         clearTimeout(timeoutId);
+
+        // 2. Si /banner/profile no responde imagen, intentar /outfits/outfit
+        if (!imgRes.ok) {
+          const outfitUrl = `${cleanBaseUrl}/outfits/outfit?uid=${encodeURIComponent(uid)}&region=${encodeURIComponent(region)}&key=${encodeURIComponent(apiKey)}`;
+          const c2 = new AbortController();
+          const t2 = setTimeout(() => c2.abort(), 4000);
+          imgRes = await fetch(outfitUrl, { signal: c2.signal });
+          clearTimeout(t2);
+        }
 
         if (imgRes.ok) {
           const contentType = imgRes.headers.get("content-type") || "";
