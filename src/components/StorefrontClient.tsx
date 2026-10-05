@@ -440,25 +440,25 @@ export default function StorefrontClient({
       {/* ========================================================================= */}
       <div 
         aria-hidden="true" 
-        className="fixed inset-0 pointer-events-none -z-10 bg-soul-dark-neon overflow-hidden transform-gpu will-change-transform"
+        className="fixed inset-0 pointer-events-none -z-10 bg-soul-elegante overflow-hidden transform-gpu will-change-transform"
       >
         {/* Viñeta sutil para dar profundidad cinematográfica */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/30 pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/25 pointer-events-none" />
 
         {/* Letras rosadas de Graffiti elegantes integradas en la pared oscura */}
-        <div className="absolute top-[10%] -left-6 md:left-6 animate-graffiti-1 opacity-45 mix-blend-screen">
+        <div className="absolute top-[8%] -left-6 md:left-6 animate-graffiti-1 opacity-30 mix-blend-screen">
           <GraffitiTag />
         </div>
 
-        <div className="absolute top-[16%] -right-10 md:right-10 animate-graffiti-2 opacity-40 mix-blend-screen">
+        <div className="absolute top-[14%] -right-10 md:right-10 animate-graffiti-2 opacity-25 mix-blend-screen">
           <GraffitiTag />
         </div>
 
-        <div className="absolute top-[54%] -left-10 md:left-8 animate-graffiti-3 opacity-35 mix-blend-screen">
+        <div className="absolute top-[56%] -left-10 md:left-8 animate-graffiti-3 opacity-25 mix-blend-screen">
           <GraffitiTag />
         </div>
 
-        <div className="absolute top-[62%] -right-10 md:right-8 animate-graffiti-4 opacity-40 mix-blend-screen">
+        <div className="absolute top-[64%] -right-10 md:right-8 animate-graffiti-4 opacity-30 mix-blend-screen">
           <GraffitiTag />
         </div>
       </div>

@@ -90,13 +90,12 @@ body {
   will-change: transform;
 }
 
-/* Fondo Elegante Dark Industrial con Neón Ámbar/Dorado (Exacto al diseño) */
+/* Fondo Elegante Dark Industrial con Neón Ámbar/Dorado (Exacto al diseño del usuario) */
+.bg-soul-elegante,
 .bg-soul-dark-neon,
 .bg-soul-fiery {
   background-color: #07080B;
-  background-image: 
-    radial-gradient(ellipse at 50% 50%, rgba(255, 170, 0, 0.08) 0%, transparent 60%),
-    url('/images/soul-bg-dark-neon.jpg');
+  background-image: url('/images/soul-bg-elegante.jpg');
   background-size: cover;
   background-position: center center;
   background-repeat: no-repeat;
