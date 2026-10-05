@@ -117,15 +117,91 @@ type Currency = "USD" | "VES" | "MXN";
 function GraffitiTag({ className = "", style = {} }: { className?: string; style?: React.CSSProperties }) {
   return (
     <div 
-      className={`font-graffiti select-none pointer-events-none tracking-normal uppercase font-black leading-[0.8] text-center text-[#FF007F] ${className}`}
-      style={{
-        WebkitTextStroke: "1px #FF1493",
-        textShadow: "0 0 15px rgba(255, 0, 127, 0.75), 0 0 35px rgba(255, 0, 127, 0.45)",
-        ...style
-      }}
+      className={`font-graffiti select-none pointer-events-none tracking-normal uppercase font-black leading-[0.8] text-center text-[#FF007F] drop-shadow-[0_2px_10px_rgba(255,0,127,0.7)] ${className}`}
+      style={style}
     >
       <div className="text-6xl sm:text-7xl md:text-8xl lg:text-9xl tracking-tight">SOUL</div>
       <div className="text-6xl sm:text-7xl md:text-8xl lg:text-9xl tracking-tight -mt-2">STORE</div>
+    </div>
+  );
+}
+
+/* Carrusel móvil aislado para evitar re-renderizados globales */
+function MobileOffersCarousel({ 
+  offers, 
+  onSelect, 
+  formatPrice 
+}: { 
+  offers: Product[]; 
+  onSelect: (p: Product) => void; 
+  formatPrice: (price: number, item?: any) => string; 
+}) {
+  const [activeIdx, setActiveIdx] = useState(0);
+  const currentOffer = offers[activeIdx] || offers[0];
+  const promoImg = currentOffer?.imagen_oferta_url || currentOffer?.imagen_url || "https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=600&q=80";
+
+  if (!currentOffer) return null;
+
+  return (
+    <div className="space-y-3">
+      <div 
+        onClick={() => onSelect(currentOffer)}
+        className="group relative h-48 rounded-3xl overflow-hidden border border-white/15 shadow-2xl p-4 flex flex-col justify-between cursor-pointer bg-[#12141D]"
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img 
+          src={promoImg} 
+          alt={currentOffer.nombre} 
+          loading="lazy"
+          decoding="async"
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/75 to-black/35" />
+
+        <div className="relative z-10 flex items-center justify-between">
+          <span className="px-2.5 py-1 rounded-full bg-black/80 border border-white/10 text-white text-[11px] font-bold font-mono">
+            ✦ {currentOffer.categoria_nombre || "Gaming"}
+          </span>
+          <span className="px-2.5 py-1 rounded-full bg-[#FF007F] text-white text-[11px] font-black uppercase">
+            ▶ PROMO
+          </span>
+        </div>
+
+        <div className="relative z-10 mt-auto">
+          <span className="text-[11px] font-mono text-[#FF007F] font-bold uppercase tracking-wider block">
+            {currentOffer.subcategoria_nombre || "FREE FIRE"}
+          </span>
+          <p className="text-base font-black text-white leading-tight">
+            {currentOffer.nombre}
+          </p>
+
+          <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/20">
+            <span className="text-sm font-black text-[#FFF01F] font-mono">
+              {formatPrice(currentOffer.precio_base, currentOffer)}
+            </span>
+            <span className="px-4 py-1.5 rounded-full bg-white text-black font-bold text-xs shadow flex items-center gap-1">
+              <span>Comprar</span>
+              <span>&rarr;</span>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Indicadores de Paginación Móvil */}
+      <div className="flex items-center justify-center gap-2 pt-1">
+        {offers.map((_, idx) => (
+          <button
+            key={idx}
+            onClick={(e) => { e.stopPropagation(); setActiveIdx(idx); }}
+            className={`rounded-full transition-all ${
+              activeIdx === idx
+                ? "w-4 h-2 bg-[#D61A1A] shadow-[0_0_8px_#D61A1A]"
+                : "w-2 h-2 bg-white/30"
+            }`}
+            aria-label={`Ver oferta ${idx + 1}`}
+          />
+        ))}
+      </div>
     </div>
   );
 }
@@ -150,7 +226,6 @@ export default function StorefrontClient({
   const [aboutModalOpen, setAboutModalOpen] = useState(false);
   const [contactModalOpen, setContactModalOpen] = useState(false);
   const [cartModalOpen, setCartModalOpen] = useState(false);
-  const [activeOfferIndex, setActiveOfferIndex] = useState<number>(0);
 
   const [feedItems, setFeedItems] = useState<FeedItem[]>([]);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(initialUser);
@@ -375,51 +450,33 @@ export default function StorefrontClient({
     return combined.slice(0, 4);
   }, [productsList]);
 
-  // Rotación automática suave del carrusel en móvil cada 4 segundos
-  useEffect(() => {
-    if (specialOffersList.length <= 1) return;
-    const interval = setInterval(() => {
-      setActiveOfferIndex((prev) => (prev + 1) % specialOffersList.length);
-    }, 4500);
-    return () => clearInterval(interval);
-  }, [specialOffersList.length]);
-
   return (
     <div className="min-h-screen text-white relative selection:bg-[#FF007F] selection:text-white pb-24 overflow-x-hidden">
       
       {/* ========================================================================= */}
-      {/* CAPA DE FONDO FIJO CON FUEGO Y LETRAS ROSADAS EN MOVIMIENTO CONSTANTE     */}
+      {/* CAPA DE FONDO FIJO CON ROJO Y AMARILLO VIBRANTE (EXACTO AL DISEÑO)        */}
       {/* ========================================================================= */}
       <div 
         aria-hidden="true" 
         className="fixed inset-0 pointer-events-none -z-10 bg-soul-fiery overflow-hidden transform-gpu will-change-transform"
       >
-        {/* Viñeta ambiental oscura superior e inferior */}
-        <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-transparent to-[#0B0D13] opacity-90" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,rgba(11,13,19,0.85)_80%)]" />
+        {/* Viñeta suave en bordes sin oscurecer los colores vibrantes del fondo */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/25 pointer-events-none" />
 
         {/* Letras rosadas de Graffiti moviéndose por toda la página */}
-        <div className="absolute top-[6%] -left-8 md:left-4 animate-graffiti-1 opacity-55">
+        <div className="absolute top-[8%] -left-8 md:left-4 animate-graffiti-1 opacity-70">
           <GraffitiTag />
         </div>
 
-        <div className="absolute top-[14%] -right-12 md:right-8 animate-graffiti-2 opacity-50">
+        <div className="absolute top-[14%] -right-12 md:right-8 animate-graffiti-2 opacity-65">
           <GraffitiTag />
         </div>
 
-        <div className="absolute top-[44%] -left-16 md:left-12 animate-graffiti-3 opacity-45">
+        <div className="absolute top-[52%] -left-14 md:left-10 animate-graffiti-3 opacity-60">
           <GraffitiTag />
         </div>
 
-        <div className="absolute top-[50%] -right-16 md:right-10 animate-graffiti-4 opacity-50">
-          <GraffitiTag />
-        </div>
-
-        <div className="absolute top-[78%] left-2 md:left-24 animate-graffiti-1 opacity-40">
-          <GraffitiTag />
-        </div>
-
-        <div className="absolute top-[82%] right-4 md:right-28 animate-graffiti-2 opacity-45">
+        <div className="absolute top-[58%] -right-14 md:right-10 animate-graffiti-4 opacity-65">
           <GraffitiTag />
         </div>
       </div>
@@ -806,76 +863,11 @@ export default function StorefrontClient({
             {/* VISTA MÓVIL: CARRUSEL DESLIZANTE CON LOS PUNTOS DE PAGINACIÓN */}
             {/* ============================================================== */}
             <div className="block sm:hidden">
-              {(() => {
-                const currentOffer = specialOffersList[activeOfferIndex] || specialOffersList[0];
-                const promoImg = currentOffer.imagen_oferta_url || currentOffer.imagen_url || "https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=600&q=80";
-
-                return (
-                  <div className="space-y-3">
-                    <div 
-                      onClick={() => setSelectedProduct(currentOffer)}
-                      className="group relative h-48 rounded-3xl overflow-hidden border border-white/15 shadow-2xl p-4 flex flex-col justify-between cursor-pointer bg-[#12141D]"
-                    >
-                      {/* Imagen de fondo */}
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img 
-                        src={promoImg} 
-                        alt={currentOffer.nombre} 
-                        loading="lazy"
-                        decoding="async"
-                        className="absolute inset-0 w-full h-full object-cover"
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black via-black/75 to-black/35" />
-
-                      {/* Header de Badges */}
-                      <div className="relative z-10 flex items-center justify-between">
-                        <span className="px-2.5 py-1 rounded-full bg-black/80 border border-white/10 text-white text-[11px] font-bold font-mono">
-                          ✦ {currentOffer.categoria_nombre || "Gaming"}
-                        </span>
-                        <span className="px-2.5 py-1 rounded-full bg-[#FF007F] text-white text-[11px] font-black uppercase">
-                          ▶ PROMO
-                        </span>
-                      </div>
-
-                      {/* Contenido inferior */}
-                      <div className="relative z-10 mt-auto">
-                        <span className="text-[11px] font-mono text-[#FF007F] font-bold uppercase tracking-wider block">
-                          {currentOffer.subcategoria_nombre || "FREE FIRE"}
-                        </span>
-                        <p className="text-base font-black text-white leading-tight">
-                          {currentOffer.nombre}
-                        </p>
-
-                        <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/20">
-                          <span className="text-sm font-black text-[#FFF01F] font-mono">
-                            {formatPrice(currentOffer.precio_base, currentOffer)}
-                          </span>
-                          <span className="px-4 py-1.5 rounded-full bg-white text-black font-bold text-xs shadow flex items-center gap-1">
-                            <span>Comprar</span>
-                            <span>&rarr;</span>
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Indicadores de Paginación Móvil */}
-                    <div className="flex items-center justify-center gap-2 pt-1">
-                      {specialOffersList.map((_, idx) => (
-                        <button
-                          key={idx}
-                          onClick={() => setActiveOfferIndex(idx)}
-                          className={`rounded-full transition-all ${
-                            activeOfferIndex === idx
-                              ? "w-4 h-2 bg-[#D61A1A] shadow-[0_0_8px_#D61A1A]"
-                              : "w-2 h-2 bg-white/30"
-                          }`}
-                          aria-label={`Ver oferta ${idx + 1}`}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                );
-              })()}
+              <MobileOffersCarousel 
+                offers={specialOffersList} 
+                onSelect={setSelectedProduct} 
+                formatPrice={formatPrice} 
+              />
             </div>
 
           </div>

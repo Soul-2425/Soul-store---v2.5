@@ -45,70 +45,58 @@ body {
   font-family: 'Sedgwick Ave Display', 'Permanent Marker', cursive, sans-serif;
 }
 
-/* Animaciones flotantes para las letras rosadas de graffiti en el fondo */
+/* Animaciones 100% aceleradas por GPU (translate3d/rotate) sin filtros para cero lag */
 @keyframes floatDrift1 {
-  0% { transform: translate3d(0, 0, 0) rotate(-14deg) scale(1); }
-  33% { transform: translate3d(30px, -40px, 0) rotate(-9deg) scale(1.04); }
-  66% { transform: translate3d(-20px, -70px, 0) rotate(-16deg) scale(0.97); }
-  100% { transform: translate3d(0, 0, 0) rotate(-14deg) scale(1); }
+  0% { transform: translate3d(0, 0, 0) rotate(-14deg); }
+  50% { transform: translate3d(24px, -32px, 0) rotate(-8deg); }
+  100% { transform: translate3d(0, 0, 0) rotate(-14deg); }
 }
 
 @keyframes floatDrift2 {
-  0% { transform: translate3d(0, 0, 0) rotate(16deg) scale(1); }
-  33% { transform: translate3d(-35px, 45px, 0) rotate(11deg) scale(0.96); }
-  66% { transform: translate3d(25px, 60px, 0) rotate(18deg) scale(1.05); }
-  100% { transform: translate3d(0, 0, 0) rotate(16deg) scale(1); }
+  0% { transform: translate3d(0, 0, 0) rotate(15deg); }
+  50% { transform: translate3d(-28px, 36px, 0) rotate(9deg); }
+  100% { transform: translate3d(0, 0, 0) rotate(15deg); }
 }
 
 @keyframes floatDrift3 {
-  0% { transform: translate3d(0, 0, 0) rotate(-8deg) scale(1); }
-  50% { transform: translate3d(45px, 35px, 0) rotate(-3deg) scale(1.06); }
-  100% { transform: translate3d(0, 0, 0) rotate(-8deg) scale(1); }
+  0% { transform: translate3d(0, 0, 0) rotate(-7deg); }
+  50% { transform: translate3d(32px, 26px, 0) rotate(-2deg); }
+  100% { transform: translate3d(0, 0, 0) rotate(-7deg); }
 }
 
 @keyframes floatDrift4 {
-  0% { transform: translate3d(0, 0, 0) rotate(12deg) scale(1); }
-  50% { transform: translate3d(-40px, -30px, 0) rotate(7deg) scale(0.95); }
-  100% { transform: translate3d(0, 0, 0) rotate(12deg) scale(1); }
-}
-
-@keyframes pinkGlowPulse {
-  0%, 100% {
-    opacity: 0.45;
-    filter: drop-shadow(0 0 15px rgba(255, 0, 127, 0.6)) drop-shadow(0 0 35px rgba(255, 0, 127, 0.35));
-  }
-  50% {
-    opacity: 0.75;
-    filter: drop-shadow(0 0 25px rgba(255, 0, 127, 0.95)) drop-shadow(0 0 50px rgba(255, 0, 127, 0.6)) drop-shadow(0 0 6px #FF1493);
-  }
+  0% { transform: translate3d(0, 0, 0) rotate(11deg); }
+  50% { transform: translate3d(-30px, -24px, 0) rotate(6deg); }
+  100% { transform: translate3d(0, 0, 0) rotate(11deg); }
 }
 
 .animate-graffiti-1 {
-  animation: floatDrift1 16s ease-in-out infinite, pinkGlowPulse 7s ease-in-out infinite;
-  will-change: transform, opacity;
+  animation: floatDrift1 14s ease-in-out infinite;
+  will-change: transform;
 }
 
 .animate-graffiti-2 {
-  animation: floatDrift2 20s ease-in-out infinite, pinkGlowPulse 8s ease-in-out infinite;
-  will-change: transform, opacity;
+  animation: floatDrift2 18s ease-in-out infinite;
+  will-change: transform;
 }
 
 .animate-graffiti-3 {
-  animation: floatDrift3 18s ease-in-out infinite, pinkGlowPulse 6s ease-in-out infinite;
-  will-change: transform, opacity;
+  animation: floatDrift3 16s ease-in-out infinite;
+  will-change: transform;
 }
 
 .animate-graffiti-4 {
-  animation: floatDrift4 22s ease-in-out infinite, pinkGlowPulse 9s ease-in-out infinite;
-  will-change: transform, opacity;
+  animation: floatDrift4 20s ease-in-out infinite;
+  will-change: transform;
 }
 
-/* Fondo Fuego Soul Store con Gradiente Ambiental */
+/* Fondo Fuego Rojo con Amarillo Vibrante (Exacto al diseño) */
 .bg-soul-fiery {
-  background-color: #0B0D13;
+  background-color: #B20000;
   background-image: 
-    radial-gradient(circle at 50% 15%, rgba(255, 140, 0, 0.45) 0%, rgba(214, 26, 26, 0.5) 35%, rgba(11, 13, 19, 0.92) 75%),
-    url('/images/soul-bg-fire.jpg');
+    radial-gradient(circle at 80% 25%, rgba(255, 240, 31, 0.45) 0%, rgba(255, 165, 0, 0.25) 30%, transparent 60%),
+    radial-gradient(circle at 20% 70%, rgba(214, 26, 26, 0.8) 0%, transparent 70%),
+    url('/images/soul-bg-red-yellow.jpg');
   background-size: cover;
   background-position: center top;
   background-repeat: no-repeat;
