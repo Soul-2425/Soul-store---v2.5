@@ -155,54 +155,20 @@ export async function GET(request: Request) {
       });
     }
 
-    // Cuenta Carlos / Admin (Región detectada automáticamente: US)
-    if (uid === "816331100") {
+    // Si aún no se ha configurado la API Key de SiamBhau para consultar en vivo a Garena
+    if (!apiKey) {
       return NextResponse.json({
         success: true,
-        valid: true,
-        configured: Boolean(apiKey),
-        player: {
-          uid: "816331100",
-          nickname: "Soul・Carlos⚡",
-          region: "US",
-          level: 72,
-          likes: 14850,
-          clanName: "SOUL・STORE",
-          headPic: 902028017,
-          bannerId: 901000011,
-          avatarUrl: "/api/freefire/avatar?uid=816331100&region=US&name=SoulCarlos",
-        },
-      });
-    }
-
-    // Para cualquier otro UID numérico mientras la clave en vivo se conecta
-    if (uid.length >= 6 && /^\d+$/.test(uid)) {
-      const generatedLevel = 45 + (parseInt(uid.slice(-2)) % 35);
-      const generatedLikes = 1200 + (parseInt(uid.slice(-3)) * 12);
-      const fallbackNick = `FF・Player_${uid.slice(-4)}`;
-      const autoRegion = defaultRegion || "US";
-
-      return NextResponse.json({
-        success: true,
-        valid: true,
-        configured: Boolean(apiKey),
-        simulated: !apiKey,
-        player: {
-          uid,
-          nickname: fallbackNick,
-          region: autoRegion,
-          level: generatedLevel,
-          likes: generatedLikes,
-          clanName: "ELITE・TEAM",
-          avatarUrl: `/api/freefire/avatar?uid=${uid}&region=${autoRegion}&name=${encodeURIComponent(fallbackNick)}`,
-        },
+        valid: false,
+        configured: false,
+        error: "Para consultar el nickname real de esta cuenta en Garena, se necesita la API Key de SiamBhau (solicítala gratis en t.me/SiamBhau y guárdala en el Panel Admin).",
       });
     }
 
     return NextResponse.json({
       success: true,
       valid: false,
-      error: "UID no válido o cuenta no encontrada en los servidores de Free Fire.",
+      error: "UID no encontrado o no existe en los servidores de Free Fire.",
     });
   } catch (err: any) {
     console.error("Error al procesar validación Free Fire:", err);
