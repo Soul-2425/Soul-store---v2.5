@@ -4055,7 +4055,7 @@ export default function AdminDashboardPage() {
 
                     {/* Resultado de la Prueba */}
                     {testingFfResult && (
-                      <div className="p-3.5 rounded-xl bg-emerald-950/40 border border-emerald-500/40 space-y-2">
+                      <div className="p-3.5 rounded-xl bg-emerald-950/40 border border-emerald-500/40 space-y-3">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             <CheckCircle2 className="w-4 h-4 text-emerald-400" />
@@ -4065,18 +4065,46 @@ export default function AdminDashboardPage() {
                             Región: {testingFfResult.player?.region || testingFfRegion}
                           </span>
                         </div>
-                        <div className="grid grid-cols-2 gap-2 text-xs pt-1">
-                          <div className="bg-slate-950/60 p-2 rounded-lg border border-slate-800">
-                            <span className="text-[10px] text-slate-400 block font-mono">Nickname</span>
-                            <span className="font-bold text-emerald-400 text-sm truncate block font-mono">
-                              {testingFfResult.player?.nickname || "Desconocido"}
-                            </span>
+
+                        {/* Foto + Nickname + Likes + Nivel */}
+                        <div className="flex items-center gap-3">
+                          <div className="relative shrink-0">
+                            <div className="w-14 h-14 rounded-xl overflow-hidden border-2 border-emerald-400 bg-slate-950 flex items-center justify-center shadow">
+                              <img
+                                src={testingFfResult.player?.avatarUrl || `/api/freefire/avatar?uid=${encodeURIComponent(testingFfResult.player?.uid || testingFfUid)}&region=${encodeURIComponent(testingFfResult.player?.region || testingFfRegion)}&name=${encodeURIComponent(testingFfResult.player?.nickname || 'FF')}`}
+                                alt={testingFfResult.player?.nickname}
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  e.currentTarget.src = `/api/freefire/avatar?name=${encodeURIComponent(testingFfResult.player?.nickname || 'FF')}`;
+                                }}
+                              />
+                            </div>
+                            <div className="absolute -bottom-1 -right-1 px-1.5 py-0.2 rounded bg-[#FFF01F] text-black font-black text-[9px] font-mono">
+                              Nv.{testingFfResult.player?.level || 1}
+                            </div>
                           </div>
-                          <div className="bg-slate-950/60 p-2 rounded-lg border border-slate-800">
-                            <span className="text-[10px] text-slate-400 block font-mono">Nivel / UID</span>
-                            <span className="font-bold text-white text-sm font-mono">
-                              Nv. {testingFfResult.player?.level || "N/A"}
-                            </span>
+
+                          <div className="min-w-0 flex-1 space-y-1">
+                            <div className="flex items-center gap-1.5">
+                              <h5 className="font-mono font-bold text-white text-sm truncate">
+                                {testingFfResult.player?.nickname || "Desconocido"}
+                              </h5>
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-mono">
+                              <span className="px-1.5 py-0.5 rounded bg-slate-950 text-cyan-300 font-bold border border-slate-800">
+                                ⭐ Nv. {testingFfResult.player?.level || "N/A"}
+                              </span>
+                              <span className="px-1.5 py-0.5 rounded bg-pink-500/20 text-pink-300 font-bold border border-pink-500/30">
+                                ❤️ {Number(testingFfResult.player?.likes || 0).toLocaleString()} Me gusta
+                              </span>
+                              {testingFfResult.player?.clanName && (
+                                <span className="px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 font-bold border border-purple-500/30">
+                                  🛡️ {testingFfResult.player.clanName}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </div>
