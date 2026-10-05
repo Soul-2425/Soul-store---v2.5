@@ -90,15 +90,15 @@ body {
   will-change: transform;
 }
 
-/* Fondo Fuego Rojo con Amarillo Vibrante (Exacto al diseño) */
+/* Fondo Elegante Dark Industrial con Neón Ámbar/Dorado (Exacto al diseño) */
+.bg-soul-dark-neon,
 .bg-soul-fiery {
-  background-color: #B20000;
+  background-color: #07080B;
   background-image: 
-    radial-gradient(circle at 80% 25%, rgba(255, 240, 31, 0.45) 0%, rgba(255, 165, 0, 0.25) 30%, transparent 60%),
-    radial-gradient(circle at 20% 70%, rgba(214, 26, 26, 0.8) 0%, transparent 70%),
-    url('/images/soul-bg-red-yellow.jpg');
+    radial-gradient(ellipse at 50% 50%, rgba(255, 170, 0, 0.08) 0%, transparent 60%),
+    url('/images/soul-bg-dark-neon.jpg');
   background-size: cover;
-  background-position: center top;
+  background-position: center center;
   background-repeat: no-repeat;
 }
 

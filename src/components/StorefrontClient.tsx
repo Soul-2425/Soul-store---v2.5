@@ -196,7 +196,7 @@ function MobileOffersCarousel({
             <span className="text-sm font-black text-[#FFF01F] font-mono">
               {formatPrice(currentOffer.precio_base, currentOffer)}
             </span>
-            <span className="px-4 py-1.5 rounded-full bg-white text-black font-bold text-xs shadow flex items-center gap-1">
+            <span className="px-4 py-1.5 rounded-full bg-[#FFF01F] text-black font-bold text-xs shadow-[0_0_10px_rgba(255,240,31,0.35)] flex items-center gap-1">
               <span>Comprar</span>
               <span>&rarr;</span>
             </span>
@@ -436,29 +436,29 @@ export default function StorefrontClient({
     <div className="min-h-screen text-white relative selection:bg-[#FF007F] selection:text-white pb-24 overflow-x-hidden">
       
       {/* ========================================================================= */}
-      {/* CAPA DE FONDO FIJO CON ROJO Y AMARILLO VIBRANTE (EXACTO AL DISEÑO)        */}
+      {/* CAPA DE FONDO ELEGANTE DARK INDUSTRIAL CON LÍNEA NEÓN Y PANELES METÁLICOS */}
       {/* ========================================================================= */}
       <div 
         aria-hidden="true" 
-        className="fixed inset-0 pointer-events-none -z-10 bg-soul-fiery overflow-hidden transform-gpu will-change-transform"
+        className="fixed inset-0 pointer-events-none -z-10 bg-soul-dark-neon overflow-hidden transform-gpu will-change-transform"
       >
-        {/* Viñeta suave en bordes sin oscurecer los colores vibrantes del fondo */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/25 pointer-events-none" />
+        {/* Viñeta sutil para dar profundidad cinematográfica */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/30 pointer-events-none" />
 
-        {/* Letras rosadas de Graffiti moviéndose por toda la página */}
-        <div className="absolute top-[8%] -left-8 md:left-4 animate-graffiti-1 opacity-70">
+        {/* Letras rosadas de Graffiti elegantes integradas en la pared oscura */}
+        <div className="absolute top-[10%] -left-6 md:left-6 animate-graffiti-1 opacity-45 mix-blend-screen">
           <GraffitiTag />
         </div>
 
-        <div className="absolute top-[14%] -right-12 md:right-8 animate-graffiti-2 opacity-65">
+        <div className="absolute top-[16%] -right-10 md:right-10 animate-graffiti-2 opacity-40 mix-blend-screen">
           <GraffitiTag />
         </div>
 
-        <div className="absolute top-[52%] -left-14 md:left-10 animate-graffiti-3 opacity-60">
+        <div className="absolute top-[54%] -left-10 md:left-8 animate-graffiti-3 opacity-35 mix-blend-screen">
           <GraffitiTag />
         </div>
 
-        <div className="absolute top-[58%] -right-14 md:right-10 animate-graffiti-4 opacity-65">
+        <div className="absolute top-[62%] -right-10 md:right-8 animate-graffiti-4 opacity-40 mix-blend-screen">
           <GraffitiTag />
         </div>
       </div>
@@ -732,7 +732,7 @@ export default function StorefrontClient({
             <div className="flex flex-wrap items-center gap-3 pt-2">
               <a
                 href="#catalogo-seccion"
-                className="px-6 py-2.5 rounded-full bg-white text-black font-bold text-xs sm:text-sm hover:bg-zinc-200 transition-all flex items-center gap-1.5 shadow-xl hover:scale-105 active:scale-95"
+                className="px-6 py-2.5 rounded-full bg-[#FFF01F] text-black font-extrabold text-xs sm:text-sm hover:bg-[#FFE600] transition-all flex items-center gap-1.5 shadow-[0_0_18px_rgba(255,240,31,0.35)] hover:scale-105 active:scale-95"
               >
                 <span>Ver Catálogo</span>
                 <ChevronRight className="w-4 h-4 text-black stroke-[3]" />
@@ -740,7 +740,7 @@ export default function StorefrontClient({
 
               <button
                 onClick={() => setAboutModalOpen(true)}
-                className="px-6 py-2.5 rounded-full bg-black/40 border border-[#FF007F]/50 text-white font-semibold text-xs sm:text-sm hover:border-[#FF007F] hover:bg-black/60 transition-all shadow-xl hover:scale-105 active:scale-95"
+                className="px-6 py-2.5 rounded-full bg-black/60 border border-white/20 text-white font-semibold text-xs sm:text-sm hover:border-white/40 hover:bg-black/80 transition-all shadow-xl hover:scale-105 active:scale-95"
               >
                 Saber de Nosotros
               </button>
@@ -776,7 +776,7 @@ export default function StorefrontClient({
             {/* ============================================================== */}
             {/* VISTA PC: UN CUADRO GRANDE CONTENIENDO LOS CUADROS DE OFERTAS  */}
             {/* ============================================================== */}
-            <div className="hidden sm:block p-4 sm:p-5 rounded-3xl bg-[#0B0D13]/85 border border-white/15 backdrop-blur-md shadow-2xl relative overflow-hidden">
+            <div className="hidden sm:block p-4 sm:p-5 rounded-3xl bg-[#0E1017]/85 border border-amber-500/25 backdrop-blur-xl shadow-[0_12px_40px_rgba(0,0,0,0.7),0_0_25px_rgba(255,165,0,0.06)] relative overflow-hidden">
               {specialOffersList.length === 0 ? (
                 <div className="py-12 text-center text-zinc-400">
                   <p className="text-sm">No hay ofertas especiales activas configuradas en el panel admin.</p>
@@ -784,7 +784,7 @@ export default function StorefrontClient({
               ) : (
                 <div className={`grid gap-3.5 ${
                   specialOffersList.length === 1 
-                    ? "grid-cols-1 max-w-sm mx-auto" 
+                    ? "grid-cols-1 max-w-md mx-auto" 
                     : "grid-cols-2"
                 }`}>
                   {specialOffersList.map((offer) => {
@@ -842,7 +842,7 @@ export default function StorefrontClient({
                             <span className="text-xs font-black text-[#FFF01F] font-mono">
                               {formatPrice(offer.precio_base, offer)}
                             </span>
-                            <button className="px-3 py-1 rounded-full bg-white text-black font-bold text-[11px] group-hover:bg-[#FFF01F] transition-all shadow flex items-center gap-1">
+                            <button className="px-3.5 py-1.5 rounded-full bg-[#FFF01F] text-black font-bold text-[11px] hover:bg-[#FFE600] transition-all shadow-[0_0_10px_rgba(255,240,31,0.35)] flex items-center gap-1">
                               <span>Comprar</span>
                               <span>&rarr;</span>
                             </button>
@@ -958,7 +958,7 @@ export default function StorefrontClient({
                     setActiveCategoryFilter(cat.id);
                     setActiveSubcategoryFilter("all");
                   }}
-                  className="rounded-2xl bg-[#141620]/90 border border-white/10 hover:border-[#FF007F]/60 transition-all duration-300 hover:scale-[1.02] cursor-pointer shadow-xl p-4 flex flex-col justify-between h-44 sm:h-48 group relative"
+                  className="rounded-3xl bg-[#10121A]/85 border border-white/10 hover:border-amber-500/40 transition-all duration-300 hover:scale-[1.02] cursor-pointer shadow-xl p-4 sm:p-5 flex flex-col justify-between h-44 sm:h-48 group relative backdrop-blur-md"
                 >
                   {/* Fila Superior: Badge CATEGORÍA + Badge Contador */}
                   <div className="flex items-center justify-between gap-1">
@@ -1012,7 +1012,7 @@ export default function StorefrontClient({
                 setCatalogViewMode("all_products");
                 setActiveCategoryFilter("all");
               }}
-              className="rounded-2xl bg-[#141620]/90 border border-white/10 hover:border-[#FFF01F]/60 transition-all duration-300 hover:scale-[1.02] cursor-pointer shadow-xl p-4 flex flex-col justify-between h-44 sm:h-48 group relative"
+              className="rounded-3xl bg-[#10121A]/85 border border-white/10 hover:border-[#FFF01F]/50 transition-all duration-300 hover:scale-[1.02] cursor-pointer shadow-xl p-4 sm:p-5 flex flex-col justify-between h-44 sm:h-48 group relative backdrop-blur-md"
             >
               <div className="flex items-center justify-between gap-1">
                 <span className="px-2 py-0.5 rounded-full bg-black/70 border border-white/10 text-white text-[10px] font-mono uppercase tracking-wider">
