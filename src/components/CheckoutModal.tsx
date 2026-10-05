@@ -144,7 +144,6 @@ export default function CheckoutModal({
     )
   );
 
-  const [ffRegion, setFfRegion] = useState("US");
   const [ffValidating, setFfValidating] = useState(false);
   const [ffPlayer, setFfPlayer] = useState<{
     nickname: string;
@@ -279,7 +278,7 @@ export default function CheckoutModal({
       setFfValidating(true);
       setFfError(null);
 
-      const res = await fetch(`/api/freefire/validate?uid=${encodeURIComponent(targetUid)}&region=${encodeURIComponent(ffRegion)}`);
+      const res = await fetch(`/api/freefire/validate?uid=${encodeURIComponent(targetUid)}`);
       const data = await res.json();
 
       if (data.success && data.valid && data.player) {
@@ -287,7 +286,7 @@ export default function CheckoutModal({
         setFfError(null);
       } else {
         setFfPlayer(null);
-        setFfError(data.error || `No se encontró cuenta en Free Fire (${ffRegion}) con el ID ${targetUid}.`);
+        setFfError(data.error || `No se encontró cuenta en Free Fire con el ID ${targetUid}.`);
       }
     } catch {
       setFfError("Error de conexión al consultar el servidor de Free Fire.");
@@ -384,10 +383,10 @@ export default function CheckoutModal({
           email_cliente: email.trim() || undefined,
           cliente_email: email.trim() || undefined,
           comentarios_adicionales: (ffPlayer 
-            ? `${comentarios.trim() ? comentarios.trim() + " | " : ""}Cuenta FF Verificada: ${ffPlayer.nickname}${ffPlayer.level ? ' (Nivel ' + ffPlayer.level + ')' : ''} [Región ${ffPlayer.region || ffRegion}]`
+            ? `${comentarios.trim() ? comentarios.trim() + " | " : ""}Cuenta FF Verificada: ${ffPlayer.nickname}${ffPlayer.level ? ' (Nivel ' + ffPlayer.level + ')' : ''} [Región: ${ffPlayer.region}]`
             : comentarios.trim()) || undefined,
           comentarios: (ffPlayer 
-            ? `${comentarios.trim() ? comentarios.trim() + " | " : ""}Cuenta FF Verificada: ${ffPlayer.nickname}${ffPlayer.level ? ' (Nivel ' + ffPlayer.level + ')' : ''} [Región ${ffPlayer.region || ffRegion}]`
+            ? `${comentarios.trim() ? comentarios.trim() + " | " : ""}Cuenta FF Verificada: ${ffPlayer.nickname}${ffPlayer.level ? ' (Nivel ' + ffPlayer.level + ')' : ''} [Región: ${ffPlayer.region}]`
             : comentarios.trim()) || undefined,
           es_override_duplicado: overrideDuplicate,
           override_duplicado: overrideDuplicate,
@@ -700,37 +699,19 @@ export default function CheckoutModal({
                         }`}
                       />
 
-                      {/* Selector de Región Free Fire */}
-                      <select
-                        value={ffRegion}
-                        onChange={(e) => {
-                          setFfRegion(e.target.value);
-                          setFfPlayer(null);
-                          setFfError(null);
-                        }}
-                        className="px-2.5 py-2.5 rounded-xl bg-slate-900 border border-white/15 text-xs text-white font-mono outline-none shrink-0 cursor-pointer"
-                        title="Región del servidor de Free Fire"
-                      >
-                        <option value="US">US (EE.UU./Sudamérica)</option>
-                        <option value="SAC">SAC (Sudamérica Sur)</option>
-                        <option value="BR">BR (Brasil)</option>
-                        <option value="BD">BD (Bangladesh)</option>
-                        <option value="IND">IND (India)</option>
-                        <option value="SG">SG (Singapur)</option>
-                        <option value="ME">ME (Medio Oriente)</option>
-                        <option value="EU">EU (Europa)</option>
-                      </select>
-
                       <button
                         type="button"
                         disabled={ffValidating || !playerId.trim()}
                         onClick={() => handleValidateFreeFire()}
-                        className="px-3.5 py-2.5 rounded-xl bg-[#FFF01F] hover:bg-[#FFE600] disabled:opacity-40 text-black font-black text-xs transition flex items-center gap-1 shadow shrink-0"
+                        className="px-5 py-2.5 rounded-xl bg-[#FFF01F] hover:bg-[#FFE600] disabled:opacity-40 text-black font-black text-xs transition flex items-center gap-1.5 shadow shrink-0"
                       >
                         {ffValidating ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span>Validando...</span>
+                          </>
                         ) : (
-                          <span>Validar</span>
+                          <span>Validar ID</span>
                         )}
                       </button>
                     </div>
@@ -782,9 +763,9 @@ export default function CheckoutModal({
                             {/* Metadatos: Región, Likes y Nivel */}
                             <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-mono">
                               {/* Región */}
-                              <span className="px-1.5 py-0.5 rounded bg-slate-800 text-cyan-300 font-bold border border-cyan-500/30 flex items-center gap-1">
+                              <span className="px-2 py-0.5 rounded bg-slate-800 text-cyan-300 font-bold border border-cyan-500/30 flex items-center gap-1 font-mono">
                                 <Globe className="w-3 h-3 text-cyan-400" />
-                                {ffPlayer.region || ffRegion}
+                                {ffPlayer.region}
                               </span>
 
                               {/* Nivel */}

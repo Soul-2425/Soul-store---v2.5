@@ -857,7 +857,7 @@ export default function AdminDashboardPage() {
     setTestingFfError(null);
     try {
       const res = await fetch(
-        `/api/freefire/validate?uid=${encodeURIComponent(testingFfUid.trim())}&region=${encodeURIComponent(testingFfRegion.trim())}`
+        `/api/freefire/validate?uid=${encodeURIComponent(testingFfUid.trim())}`
       );
       const data = await res.json();
       if (res.ok && data.success) {
@@ -4011,27 +4011,15 @@ export default function AdminDashboardPage() {
                       Ingresa cualquier UID y región para probar la conexión directa con el endpoint <code className="text-cyan-400">/freefireinfo/bhau</code>.
                     </p>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                      <div className="sm:col-span-2 space-y-1">
-                        <label className="text-[11px] font-mono text-slate-300 block">UID del Jugador</label>
-                        <input
-                          type="text"
-                          value={testingFfUid}
-                          onChange={(e) => setTestingFfUid(e.target.value)}
-                          placeholder="2579249340"
-                          className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-mono text-xs focus:border-cyan-500 outline-none"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-[11px] font-mono text-slate-300 block">Región</label>
-                        <input
-                          type="text"
-                          value={testingFfRegion}
-                          onChange={(e) => setTestingFfRegion(e.target.value.toUpperCase())}
-                          placeholder="BD"
-                          className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-mono text-xs uppercase font-bold focus:border-cyan-500 outline-none"
-                        />
-                      </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-mono text-slate-300 block font-bold">UID del Jugador (Detecta la región automáticamente)</label>
+                      <input
+                        type="text"
+                        value={testingFfUid}
+                        onChange={(e) => setTestingFfUid(e.target.value)}
+                        placeholder="Ej: 816331100 o 2579249340"
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white font-mono text-xs focus:border-cyan-500 outline-none"
+                      />
                     </div>
 
                     <button
