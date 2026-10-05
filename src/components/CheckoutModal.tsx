@@ -25,7 +25,8 @@ interface Product {
   nombre: string;
   precio_base: number;
   imagen_url?: string | null;
-  categoria_nombre?: string;
+  categoria_nombre?: string | null;
+  subcategoria_nombre?: string | null;
   precio_ref_ves?: number | null;
   precio_fijo_ves?: number | null;
   precio_ref_mxn?: number | null;
@@ -126,6 +127,24 @@ export default function CheckoutModal({
   // Datos del comprobante
   const [comprobanteUrl, setComprobanteUrl] = useState("");
   const [referenciaPago, setReferenciaPago] = useState("");
+
+  // Detección exclusiva para Free Fire dentro de categoría Gaming
+  const isFreeFire = Boolean(
+    (product.categoria_nombre?.toLowerCase().includes("gaming") || false) &&
+    (
+      product.subcategoria_nombre?.toLowerCase().includes("free fire") ||
+      product.nombre?.toLowerCase().includes("free fire") ||
+      product.nombre?.toLowerCase().includes("diamante") ||
+      product.nombre?.toLowerCase().includes("pase booyah") ||
+      product.nombre?.toLowerCase().includes("100+10") ||
+      false
+    )
+  );
+
+  const [ffRegion, setFfRegion] = useState("US");
+  const [ffValidating, setFfValidating] = useState(false);
+  const [ffPlayer, setFfPlayer] = useState<{ nickname: string; level?: string | number; region: string; uid: string } | null>(null);
+  const [ffError, setFfError] = useState<string | null>(null);
 
   // Detección de duplicados
   const [checkingDuplicate, setCheckingDuplicate] = useState(false);
@@ -235,6 +254,40 @@ export default function CheckoutModal({
     return fallback;
   };
 
+  // Validación en vivo de Free Fire Player UID
+  const handleValidateFreeFire = async (uidOverride?: string) => {
+    const targetUid = (uidOverride !== undefined ? uidOverride : playerId).trim();
+    if (!targetUid || targetUid.length < 5) {
+      setFfError("Ingresa un Player ID válido (mínimo 5 dígitos).");
+      setFfPlayer(null);
+      return;
+    }
+
+    try {
+      setFfValidating(true);
+      setFfError(null);
+
+      const res = await fetch(`/api/freefire/validate?uid=${encodeURIComponent(targetUid)}&region=${encodeURIComponent(ffRegion)}`);
+      const data = await res.json();
+
+      if (data.success && data.valid && data.player) {
+        setFfPlayer(data.player);
+        setFfError(null);
+      } else if (data.configured === false) {
+        setFfError("Validación en línea temporalmente no disponible (API Key pendiente en panel admin).");
+        setFfPlayer(null);
+      } else {
+        setFfPlayer(null);
+        setFfError(data.error || `No se encontró cuenta en Free Fire (${ffRegion}) con el ID ${targetUid}.`);
+      }
+    } catch {
+      setFfError("Error de conexión al consultar el servidor de Free Fire.");
+      setFfPlayer(null);
+    } finally {
+      setFfValidating(false);
+    }
+  };
+
   // Verificar duplicado al terminar de escribir el Player ID
   const handleCheckDuplicate = async (idToCheck: string) => {
     if (!idToCheck.trim() || idToCheck.trim().length < 4) {
@@ -321,8 +374,12 @@ export default function CheckoutModal({
           cliente_whatsapp: whatsapp.trim(),
           email_cliente: email.trim() || undefined,
           cliente_email: email.trim() || undefined,
-          comentarios_adicionales: comentarios.trim() || undefined,
-          comentarios: comentarios.trim() || undefined,
+          comentarios_adicionales: (ffPlayer 
+            ? `${comentarios.trim() ? comentarios.trim() + " | " : ""}Cuenta FF Verificada: ${ffPlayer.nickname}${ffPlayer.level ? ' (Nivel ' + ffPlayer.level + ')' : ''} [Región ${ffPlayer.region || ffRegion}]`
+            : comentarios.trim()) || undefined,
+          comentarios: (ffPlayer 
+            ? `${comentarios.trim() ? comentarios.trim() + " | " : ""}Cuenta FF Verificada: ${ffPlayer.nickname}${ffPlayer.level ? ' (Nivel ' + ffPlayer.level + ')' : ''} [Región ${ffPlayer.region || ffRegion}]`
+            : comentarios.trim()) || undefined,
           es_override_duplicado: overrideDuplicate,
           override_duplicado: overrideDuplicate,
           metodo_pago_id: selectedMethod?.id || null,
@@ -587,33 +644,152 @@ export default function CheckoutModal({
                   </div>
                 </div>
 
-                {/* ID de Jugador / Cuenta (Sin campo región, eliminado a petición del usuario) */}
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-[11px] font-mono text-slate-300 font-bold uppercase">
-                      Player ID / Cuenta *
-                    </label>
-                    {checkingDuplicate && (
-                      <span className="text-[10px] text-[#FFF01F] flex items-center gap-1 font-mono">
-                        <Loader2 className="w-2.5 h-2.5 animate-spin" />
-                        <span>Verificando...</span>
-                      </span>
+                {/* ID de Jugador / Cuenta (Con validador exclusivo para Free Fire en Gaming) */}
+                {isFreeFire ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] font-mono text-slate-300 font-bold uppercase flex items-center gap-1.5">
+                        <span>Player ID (Free Fire UID) *</span>
+                        <span className="px-1.5 py-0.2 rounded bg-[#FF007F]/20 text-[#FF007F] text-[9px] font-mono font-bold border border-[#FF007F]/40">
+                          FREE FIRE
+                        </span>
+                      </label>
+                      {ffValidating && (
+                        <span className="text-[10px] text-[#FFF01F] flex items-center gap-1 font-mono">
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          <span>Validando ID en Garena...</span>
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        required
+                        value={playerId}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setPlayerId(val);
+                          setIsDuplicate(false);
+                          setOverrideDuplicate(false);
+                          setFfPlayer(null);
+                          setFfError(null);
+                        }}
+                        onBlur={(e) => {
+                          handleCheckDuplicate(e.target.value);
+                          if (e.target.value.trim().length >= 6 && !ffPlayer) {
+                            handleValidateFreeFire(e.target.value);
+                          }
+                        }}
+                        placeholder="Ej: 2579249340"
+                        className={`flex-1 px-3.5 py-2.5 rounded-xl bg-black/60 border text-sm text-white font-mono outline-none transition ${
+                          ffPlayer
+                            ? "border-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.3)]"
+                            : ffError
+                            ? "border-red-500/60"
+                            : "border-white/15 focus:border-[#FFF01F]"
+                        }`}
+                      />
+
+                      {/* Selector de Región Free Fire */}
+                      <select
+                        value={ffRegion}
+                        onChange={(e) => {
+                          setFfRegion(e.target.value);
+                          setFfPlayer(null);
+                          setFfError(null);
+                        }}
+                        className="px-2.5 py-2.5 rounded-xl bg-slate-900 border border-white/15 text-xs text-white font-mono outline-none shrink-0 cursor-pointer"
+                        title="Región del servidor de Free Fire"
+                      >
+                        <option value="US">US (EE.UU./Sudamérica)</option>
+                        <option value="SAC">SAC (Sudamérica Sur)</option>
+                        <option value="BR">BR (Brasil)</option>
+                        <option value="BD">BD (Bangladesh)</option>
+                        <option value="IND">IND (India)</option>
+                        <option value="SG">SG (Singapur)</option>
+                        <option value="ME">ME (Medio Oriente)</option>
+                        <option value="EU">EU (Europa)</option>
+                      </select>
+
+                      <button
+                        type="button"
+                        disabled={ffValidating || !playerId.trim()}
+                        onClick={() => handleValidateFreeFire()}
+                        className="px-3.5 py-2.5 rounded-xl bg-[#FFF01F] hover:bg-[#FFE600] disabled:opacity-40 text-black font-black text-xs transition flex items-center gap-1 shadow shrink-0"
+                      >
+                        {ffValidating ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <span>Validar</span>
+                        )}
+                      </button>
+                    </div>
+
+                    {/* Estado de validación Free Fire */}
+                    {ffPlayer && (
+                      <div className="p-3 rounded-2xl bg-emerald-950/70 border border-emerald-500/60 shadow-lg text-xs space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-mono font-bold text-emerald-400 uppercase flex items-center gap-1.5">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                            Jugador Verificado de Free Fire
+                          </span>
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-mono font-bold">
+                            Cuenta Activa ✓
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between pt-1">
+                          <div>
+                            <p className="text-sm sm:text-base font-black text-white leading-tight">
+                              {ffPlayer.nickname}
+                            </p>
+                            <p className="text-[11px] text-zinc-400 font-mono mt-0.5">
+                              UID: <span className="text-zinc-200 font-bold">{playerId}</span>
+                              {ffPlayer.level ? ` • Nivel ${ffPlayer.level}` : ""}
+                              {" • Región: "}<span className="text-emerald-300 font-bold">{ffPlayer.region || ffRegion}</span>
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {ffError && (
+                      <div className="p-3 rounded-2xl bg-red-950/60 border border-red-500/40 text-red-200 text-xs flex items-center gap-2">
+                        <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+                        <div className="flex-1">
+                          <span>{ffError}</span>
+                        </div>
+                      </div>
                     )}
                   </div>
-                  <input
-                    type="text"
-                    required
-                    value={playerId}
-                    onChange={(e) => {
-                      setPlayerId(e.target.value);
-                      setIsDuplicate(false);
-                      setOverrideDuplicate(false);
-                    }}
-                    onBlur={(e) => handleCheckDuplicate(e.target.value)}
-                    placeholder="Ej: 816331100"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-black/60 border border-white/15 focus:border-[#FFF01F] text-sm text-white font-mono outline-none"
-                  />
-                </div>
+                ) : (
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[11px] font-mono text-slate-300 font-bold uppercase">
+                        Player ID / Cuenta *
+                      </label>
+                      {checkingDuplicate && (
+                        <span className="text-[10px] text-[#FFF01F] flex items-center gap-1 font-mono">
+                          <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                          <span>Verificando...</span>
+                        </span>
+                      )}
+                    </div>
+                    <input
+                      type="text"
+                      required
+                      value={playerId}
+                      onChange={(e) => {
+                        setPlayerId(e.target.value);
+                        setIsDuplicate(false);
+                        setOverrideDuplicate(false);
+                      }}
+                      onBlur={(e) => handleCheckDuplicate(e.target.value)}
+                      placeholder="Ej: 816331100"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-black/60 border border-white/15 focus:border-[#FFF01F] text-sm text-white font-mono outline-none"
+                    />
+                  </div>
+                )}
 
                 {/* Alerta de duplicados */}
                 {isDuplicate && (

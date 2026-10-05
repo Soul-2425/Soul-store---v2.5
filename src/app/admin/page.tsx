@@ -47,7 +47,8 @@ import {
   Settings2,
   CreditCard,
   QrCode,
-  FileText
+  FileText,
+  Gamepad2
 } from "lucide-react";
 import ImageUploadInput from "@/components/ImageUploadInput";
 
@@ -283,6 +284,18 @@ export default function AdminDashboardPage() {
     ves: Array<{ nick: string; price: number; minAmount: string; maxAmount: string; paymentMethods?: string[]; isMerchant?: boolean; isPro?: boolean; payTimeLimit?: number }>;
     mxn: Array<{ nick: string; price: number; minAmount: string; maxAmount: string; paymentMethods?: string[]; isMerchant?: boolean; isPro?: boolean; payTimeLimit?: number }>;
   } | null>(null);
+
+  // Integración API Free Fire (Módulo Gaming)
+  const [freefireApiKey, setFreefireApiKey] = useState("");
+  const [freefireApiUrl, setFreefireApiUrl] = useState("http://siambhau69.eu.cc");
+  const [freefireDefaultRegion, setFreefireDefaultRegion] = useState("US");
+  const [savingFreefireConfig, setSavingFreefireConfig] = useState(false);
+  const [showFfKeyPlain, setShowFfKeyPlain] = useState(false);
+  const [testingFfUid, setTestingFfUid] = useState("2579249340");
+  const [testingFfRegion, setTestingFfRegion] = useState("BD");
+  const [testingFfLoading, setTestingFfLoading] = useState(false);
+  const [testingFfResult, setTestingFfResult] = useState<any>(null);
+  const [testingFfError, setTestingFfError] = useState<string | null>(null);
 
   // Simulación "Ver como..." (Módulo 6.1)
   const [viewAsRole, setViewAsRole] = useState("admin");
@@ -590,6 +603,13 @@ export default function AdminDashboardPage() {
           if (data.mxn.solo_pro !== undefined) setSoloProMxn(Boolean(data.mxn.solo_pro));
           if (data.mxn.sin_verif !== undefined) setSinVerifMxn(Boolean(data.mxn.sin_verif));
         }
+
+        // Free Fire API
+        if (data.freefire) {
+          if (data.freefire.api_key !== undefined) setFreefireApiKey(data.freefire.api_key || "");
+          if (data.freefire.api_url) setFreefireApiUrl(data.freefire.api_url);
+          if (data.freefire.default_region) setFreefireDefaultRegion(data.freefire.default_region);
+        }
       }
     } catch (err) {
       console.error("Error al cargar tasas:", err);
@@ -798,6 +818,60 @@ export default function AdminDashboardPage() {
       showNotification("error", "Error de red al guardar tasas");
     } finally {
       setSavingTasas(false);
+    }
+  };
+
+  const handleSaveFreefireConfig = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setSavingFreefireConfig(true);
+    try {
+      const res = await fetch("/api/admin/rates", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          freefire_api_key: freefireApiKey.trim(),
+          freefire_api_url: freefireApiUrl.trim(),
+          freefire_default_region: freefireDefaultRegion.trim().toUpperCase(),
+        }),
+      });
+      if (res.ok) {
+        showNotification("success", "Configuración de API Free Fire guardada exitosamente.");
+        fetchRates();
+      } else {
+        showNotification("error", "Error al guardar configuración de Free Fire.");
+      }
+    } catch {
+      showNotification("error", "Error de red al guardar configuración de Free Fire.");
+    } finally {
+      setSavingFreefireConfig(false);
+    }
+  };
+
+  const handleTestFreefire = async () => {
+    if (!testingFfUid.trim()) {
+      showNotification("error", "Ingresa un UID para probar la validación.");
+      return;
+    }
+    setTestingFfLoading(true);
+    setTestingFfResult(null);
+    setTestingFfError(null);
+    try {
+      const res = await fetch(
+        `/api/freefire/validate?uid=${encodeURIComponent(testingFfUid.trim())}&region=${encodeURIComponent(testingFfRegion.trim())}`
+      );
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setTestingFfResult(data);
+        showNotification("success", `Jugador validado: ${data.player.nickname} (Nivel ${data.player.level || '?'})`);
+      } else {
+        setTestingFfError(data.error || "No se pudo validar el jugador.");
+        showNotification("error", data.error || "No se pudo validar el jugador.");
+      }
+    } catch {
+      setTestingFfError("Error de conexión al endpoint de validación.");
+      showNotification("error", "Error de conexión al endpoint de validación.");
+    } finally {
+      setTestingFfLoading(false);
     }
   };
 
@@ -3801,6 +3875,243 @@ export default function AdminDashboardPage() {
                 </div>
               </div>
             )}
+
+            {/* Box 4: Integración API Free Fire (Validación Oficial de IDs para Gaming) */}
+            <div className="glass-panel p-6 rounded-2xl border border-amber-500/20 space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 shadow-glow">
+                    <Gamepad2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-bold text-white text-base">API Free Fire (Validación de Jugadores)</h3>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30">
+                        Exclusivo Gaming &gt; Free Fire
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-400">
+                      Valida automáticamente el UID, nickname oficial y nivel de la cuenta antes de procesar recargas de diamantes o pases.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleSaveFreefireConfig()}
+                  disabled={savingFreefireConfig}
+                  className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white text-xs font-bold transition disabled:opacity-50 shadow-glow self-start sm:self-auto"
+                >
+                  {savingFreefireConfig ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                  <span>Guardar Configuración Free Fire</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Formulario de Configuración */}
+                <div className="space-y-4 p-5 rounded-2xl bg-slate-900/60 border border-slate-800">
+                  <h4 className="text-xs font-mono font-bold text-amber-400 uppercase tracking-wider flex items-center gap-2">
+                    <Key className="w-4 h-4" />
+                    <span>Credenciales del Proveedor API</span>
+                  </h4>
+
+                  {/* API Key */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-mono text-slate-300 block font-bold">
+                      API Key Secreta
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showFfKeyPlain ? "text" : "password"}
+                        value={freefireApiKey}
+                        onChange={(e) => setFreefireApiKey(e.target.value)}
+                        placeholder="Pega aquí tu API Key (ej. YOUR_KEY)"
+                        className="w-full pl-3 pr-10 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white font-mono text-xs focus:border-amber-500 outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowFfKeyPlain(!showFfKeyPlain)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition"
+                        title={showFfKeyPlain ? "Ocultar clave" : "Mostrar clave"}
+                      >
+                        {showFfKeyPlain ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-slate-400">
+                      Esta clave se mantiene segura en el servidor y nunca se expone a los clientes.
+                    </p>
+                  </div>
+
+                  {/* URL Base */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-mono text-slate-300 block font-bold">
+                      URL Base de la API
+                    </label>
+                    <input
+                      type="text"
+                      value={freefireApiUrl}
+                      onChange={(e) => setFreefireApiUrl(e.target.value)}
+                      placeholder="http://siambhau69.eu.cc"
+                      className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white font-mono text-xs focus:border-amber-500 outline-none"
+                    />
+                    <p className="text-[11px] text-slate-400">
+                      Servidor proxy REST para endpoints <code className="text-amber-400">/freefireinfo/bhau</code> y <code className="text-amber-400">/freefireinfo/stats</code>.
+                    </p>
+                  </div>
+
+                  {/* Región Predeterminada */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-mono text-slate-300 block font-bold">
+                      Región de Servidor por Defecto
+                    </label>
+                    <select
+                      value={freefireDefaultRegion}
+                      onChange={(e) => setFreefireDefaultRegion(e.target.value)}
+                      className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white font-mono text-xs font-bold focus:border-amber-500 outline-none"
+                    >
+                      <option value="US">US - EE.UU. / LATAM (Norte &amp; Sur)</option>
+                      <option value="SAC">SAC - Sudamérica</option>
+                      <option value="BR">BR - Brasil</option>
+                      <option value="BD">BD - Bangladesh</option>
+                      <option value="IND">IND - India</option>
+                      <option value="SG">SG - Singapur</option>
+                      <option value="EU">EU - Europa</option>
+                      <option value="ME">ME - Medio Oriente</option>
+                      <option value="RU">RU - Rusia</option>
+                      <option value="ID">ID - Indonesia</option>
+                      <option value="TH">TH - Tailandia</option>
+                      <option value="VN">VN - Vietnam</option>
+                    </select>
+                    <p className="text-[11px] text-slate-400">
+                      El cliente también puede cambiar la región en la ventana de pago si juega en otro servidor.
+                    </p>
+                  </div>
+
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={() => handleSaveFreefireConfig()}
+                      disabled={savingFreefireConfig}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/30 text-xs font-bold transition disabled:opacity-50"
+                    >
+                      {savingFreefireConfig ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                      <span>Guardar Parámetros de Free Fire</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Probador en Vivo de UID */}
+                <div className="space-y-4 p-5 rounded-2xl bg-slate-900/60 border border-slate-800 flex flex-col justify-between">
+                  <div className="space-y-3">
+                    <h4 className="text-xs font-mono font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-2">
+                      <Sparkles className="w-4 h-4" />
+                      <span>Probador de Validación en Vivo</span>
+                    </h4>
+                    <p className="text-xs text-slate-400">
+                      Ingresa cualquier UID y región para probar la conexión directa con el endpoint <code className="text-cyan-400">/freefireinfo/bhau</code>.
+                    </p>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <div className="sm:col-span-2 space-y-1">
+                        <label className="text-[11px] font-mono text-slate-300 block">UID del Jugador</label>
+                        <input
+                          type="text"
+                          value={testingFfUid}
+                          onChange={(e) => setTestingFfUid(e.target.value)}
+                          placeholder="2579249340"
+                          className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-mono text-xs focus:border-cyan-500 outline-none"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-mono text-slate-300 block">Región</label>
+                        <input
+                          type="text"
+                          value={testingFfRegion}
+                          onChange={(e) => setTestingFfRegion(e.target.value.toUpperCase())}
+                          placeholder="BD"
+                          className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-mono text-xs uppercase font-bold focus:border-cyan-500 outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleTestFreefire}
+                      disabled={testingFfLoading}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white text-xs font-bold transition disabled:opacity-50 shadow-glow"
+                    >
+                      {testingFfLoading ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Consultando Servidor Free Fire...</span>
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="w-4 h-4" />
+                          <span>Probar Validación de Jugador</span>
+                        </>
+                      )}
+                    </button>
+
+                    {/* Resultado de la Prueba */}
+                    {testingFfResult && (
+                      <div className="p-3.5 rounded-xl bg-emerald-950/40 border border-emerald-500/40 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                            <span className="text-xs font-bold text-white">Jugador Encontrado</span>
+                          </div>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                            Región: {testingFfResult.player?.region || testingFfRegion}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-xs pt-1">
+                          <div className="bg-slate-950/60 p-2 rounded-lg border border-slate-800">
+                            <span className="text-[10px] text-slate-400 block font-mono">Nickname</span>
+                            <span className="font-bold text-emerald-400 text-sm truncate block font-mono">
+                              {testingFfResult.player?.nickname || "Desconocido"}
+                            </span>
+                          </div>
+                          <div className="bg-slate-950/60 p-2 rounded-lg border border-slate-800">
+                            <span className="text-[10px] text-slate-400 block font-mono">Nivel / UID</span>
+                            <span className="font-bold text-white text-sm font-mono">
+                              Nv. {testingFfResult.player?.level || "N/A"}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {testingFfError && (
+                      <div className="p-3 rounded-xl bg-red-950/40 border border-red-500/40 flex items-start gap-2">
+                        <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+                        <div className="text-xs text-red-300">
+                          <span className="font-bold block">Error al validar UID:</span>
+                          <span className="text-[11px] opacity-90">{testingFfError}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Documentación de Endpoints del Proveedor */}
+                  <div className="pt-3 border-t border-slate-800 space-y-1.5">
+                    <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block font-bold">
+                      Endpoints Soportados por el Sistema:
+                    </span>
+                    <div className="space-y-1 font-mono text-[10px] text-slate-400">
+                      <div className="p-1.5 rounded bg-slate-950/80 border border-slate-800/80 flex items-center justify-between">
+                        <span className="text-emerald-400 font-bold">GET /freefireinfo/bhau</span>
+                        <span className="text-slate-400">Perfil Completo</span>
+                      </div>
+                      <div className="p-1.5 rounded bg-slate-950/80 border border-slate-800/80 flex items-center justify-between">
+                        <span className="text-cyan-400 font-bold">GET /freefireinfo/stats</span>
+                        <span className="text-slate-400">Stats BR / CS Ranked</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
