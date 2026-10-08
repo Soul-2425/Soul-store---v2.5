@@ -77,17 +77,20 @@ export async function PATCH(
         `;
 
         if (orderInfo.usuario_id) {
-          // Notificar al cliente con estilo de mensaje de WhatsApp
-          sendPushNotification(orderInfo.usuario_id, {
-            title: "🟢 Soul Store • ¡Tu pedido está listo! ✅",
-            body: `🎉 ¡Hola! Tu recarga de "${orderInfo.producto_nombre}" ha sido entregada exitosamente. Revisa tu cuenta del juego o servicio.`,
-            url: "/",
-            icon: "/icon.png",
-            badge: "/badge.png",
-            tag: `order-delivered-${orderInfo.pedido_id}`,
-          }).then((sent) => {
+          // Notificar al cliente con estilo de mensaje de WhatsApp (await obligatorio en Serverless)
+          try {
+            const sent = await sendPushNotification(orderInfo.usuario_id, {
+              title: "🟢 Soul Store • ¡Tu pedido está listo! ✅",
+              body: `🎉 ¡Hola! Tu recarga de "${orderInfo.producto_nombre}" ha sido entregada exitosamente. Revisa tu cuenta del juego o servicio.`,
+              url: "/",
+              icon: "/icon.png",
+              badge: "/badge.png",
+              tag: `order-delivered-${orderInfo.pedido_id}`,
+            });
             console.log(`[Order Completion] Push enviado al cliente ${orderInfo.usuario_id}: ${sent}`);
-          }).catch(console.error);
+          } catch (pushErr) {
+            console.error("[Order Completion] Error enviando push al cliente:", pushErr);
+          }
         }
       }
     }

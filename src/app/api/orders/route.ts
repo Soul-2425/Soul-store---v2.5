@@ -356,15 +356,20 @@ export async function POST(request: Request) {
       }
     }
 
-    // Notificar a los administradores estilo WhatsApp
-    notifyAdmins({
-      title: "🟢 Soul Store • Nuevo Pedido",
-      body: `📦 *#SOUL-${pedido.id.slice(0, 8).toUpperCase()}* de ${safeNombre} por *$${precioUsd} USD* (${producto.nombre}${variantName ? " - " + variantName : ""}). Toca para ver y despachar.`,
-      url: "/admin",
-      icon: "/icon.png",
-      badge: "/badge.png",
-      tag: `new-order-${pedido.id}`,
-    }).catch(console.error);
+    // Notificar a los administradores estilo WhatsApp (await obligatorio en Serverless)
+    try {
+      await notifyAdmins({
+        title: "🟢 Soul Store • Nuevo Pedido",
+        body: `📦 #SOUL-${pedido.id.slice(0, 8).toUpperCase()} de ${safeNombre} por $${precioUsd} USD (${producto.nombre}${variantName ? " - " + variantName : ""}). Toca para ver y despachar.`,
+        url: "/admin",
+        icon: "/icon.png",
+        badge: "/badge.png",
+        tag: `new-order-${pedido.id}`,
+      });
+      console.log(`[WebPush] Notificación de nuevo pedido enviada a administradores para ${pedido.id}`);
+    } catch (pushErr) {
+      console.error("[WebPush] Error enviando notificación push a administradores:", pushErr);
+    }
 
     return NextResponse.json(
       {

@@ -126,6 +126,10 @@ export default function PushNotificationManager() {
         updateViaCache: "none",
       });
 
+      try {
+        await registration.update();
+      } catch {}
+
       if (Notification.permission === "granted") {
         const sub = await registration.pushManager.getSubscription();
         if (sub) {

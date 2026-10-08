@@ -8,58 +8,43 @@ self.addEventListener('activate', function (event) {
 });
 
 self.addEventListener('push', function (event) {
-  let data = {
-    title: '🟢 Soul Store',
-    body: 'Tienes una nueva actualización en tu pedido.',
-    url: '/',
-  };
+  let title = '🟢 Soul Store • Nuevo Pedido';
+  let body = 'Tienes una nueva actualización en tu pedido.';
+  let url = '/admin';
+  let tag = 'soul-' + Date.now();
 
   if (event.data) {
     try {
-      data = event.data.json();
+      const data = event.data.json();
+      if (data.title) title = data.title;
+      if (data.body) body = data.body;
+      if (data.url) url = data.url;
+      if (data.tag) tag = data.tag;
     } catch (e) {
       const text = event.data.text();
-      data = {
-        title: '🟢 Soul Store',
-        body: text || 'Tienes una nueva notificación de Soul Store.',
-        url: '/',
-      };
+      if (text) body = text;
     }
   }
 
-  const title = data.title || '🟢 Soul Store';
-  const targetUrl = data.url || data.data?.url || '/';
-
   const options = {
-    body: data.body || 'Tienes una nueva actualización en Soul Store.',
-    icon: data.icon || '/icon.png',
-    badge: data.badge || '/badge.png',
-    image: data.image || undefined,
-    vibrate: [300, 100, 300, 100, 300], // Patrón de vibración móvil
-    tag: data.tag || `soul-${Date.now()}`,
+    body: body,
+    icon: '/icon.png',
+    badge: '/badge.png',
+    vibrate: [300, 100, 300, 100, 300],
+    tag: tag,
     renotify: true,
     requireInteraction: true,
-    silent: false,
-    timestamp: Date.now(),
     data: {
-      url: targetUrl,
+      url: url,
       dateOfArrival: Date.now(),
     },
-    actions: [
-      {
-        action: 'open',
-        title: '💬 Ver Detalles',
-      },
-    ],
   };
 
   event.waitUntil(
-    self.registration.showNotification(title, options).catch(function (err) {
-      // Fallback si el dispositivo no soporta ciertos campos como actions
+    self.registration.showNotification(title, options).catch(function () {
       return self.registration.showNotification(title, {
-        body: options.body,
-        icon: options.icon,
-        data: options.data,
+        body: body,
+        data: { url: url },
       });
     })
   );
