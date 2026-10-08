@@ -48,11 +48,13 @@ import {
   CreditCard,
   QrCode,
   FileText,
-  Gamepad2
+  Gamepad2,
+  Bell
 } from "lucide-react";
 import ImageUploadInput from "@/components/ImageUploadInput";
 import DynamicFieldsBuilder, { DynamicFieldItem } from "@/components/DynamicFieldsBuilder";
 import { subscribeCurrentDevice } from "@/components/PushNotificationManager";
+import { DEFAULT_NOTIFICATION_TEMPLATES, interpolateTemplate } from "@/utils/notifications-template";
 
 interface Category {
   id: string;
@@ -354,7 +356,7 @@ function RankPricingSection({
 }
 
 export default function AdminDashboardPage() {
-  const [activeTab, setActiveTab] = useState<"pedidos" | "catalogo" | "pagos" | "finanzas" | "usuarios" | "tasas" | "boveda">("pedidos");
+  const [activeTab, setActiveTab] = useState<"pedidos" | "catalogo" | "pagos" | "finanzas" | "usuarios" | "tasas" | "boveda" | "notificaciones">("pedidos");
 
   // Control de Acceso Exclusivo para Administradores
   const [authChecking, setAuthChecking] = useState(true);
@@ -364,6 +366,18 @@ export default function AdminDashboardPage() {
   const [pushSubscribed, setPushSubscribed] = useState(false);
   const [subscribingPush, setSubscribingPush] = useState(false);
   const [testingPush, setTestingPush] = useState(false);
+
+  // Estados de Configuración de Plantillas de Notificaciones
+  const [adminNotifTitle, setAdminNotifTitle] = useState("🟢 Nuevo Pedido: {producto} - {variante}");
+  const [adminNotifBody, setAdminNotifBody] = useState("📦 Se registró un nuevo pedido de {cliente} por ${monto} {moneda} ({metodo_pago}). Toca aquí para revisar el comprobante y despachar.");
+  const [adminNotifUrl, setAdminNotifUrl] = useState("/admin?tab=pedidos&order_id={pedido_id}");
+  const [clientNotifTitle, setClientNotifTitle] = useState("🟢 Soul Store • ¡Tu recarga de {producto} ({variante}) está lista! ✅");
+  const [clientNotifBody, setClientNotifBody] = useState("🎉 ¡Hola {cliente}! Tu pedido #{pedido_id} de {producto} ({variante}) ha sido completado con éxito. Revisa tu cuenta.");
+  const [loadingNotifConfig, setLoadingNotifConfig] = useState(false);
+  const [savingNotifConfig, setSavingNotifConfig] = useState(false);
+  const [testingAdminNotif, setTestingAdminNotif] = useState(false);
+  const [testingClientNotif, setTestingClientNotif] = useState(false);
+  const [highlightOrderId, setHighlightOrderId] = useState<string | null>(null);
 
   // Estados de Métodos de Pago Manuales
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
@@ -1392,28 +1406,99 @@ export default function AdminDashboardPage() {
   };
 
   const handleTestPush = async () => {
+    handleTestTemplate("admin");
+  };
+
+  const fetchNotifConfig = async () => {
     try {
-      setTestingPush(true);
+      setLoadingNotifConfig(true);
+      const res = await fetch("/api/admin/notifications/config");
+      const data = await res.json();
+      if (res.ok && data.config) {
+        setAdminNotifTitle(data.config.admin_titulo_template || DEFAULT_NOTIFICATION_TEMPLATES.admin_titulo_template);
+        setAdminNotifBody(data.config.admin_cuerpo_template || DEFAULT_NOTIFICATION_TEMPLATES.admin_cuerpo_template);
+        setAdminNotifUrl(data.config.admin_url_template || DEFAULT_NOTIFICATION_TEMPLATES.admin_url_template);
+        setClientNotifTitle(data.config.cliente_titulo_template || DEFAULT_NOTIFICATION_TEMPLATES.cliente_titulo_template);
+        setClientNotifBody(data.config.cliente_cuerpo_template || DEFAULT_NOTIFICATION_TEMPLATES.cliente_cuerpo_template);
+      }
+    } catch (err) {
+      console.error("Error cargando configuración de notificaciones:", err);
+    } finally {
+      setLoadingNotifConfig(false);
+    }
+  };
+
+  const handleSaveNotifConfig = async () => {
+    try {
+      setSavingNotifConfig(true);
+      const res = await fetch("/api/admin/notifications/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          admin_titulo_template: adminNotifTitle,
+          admin_cuerpo_template: adminNotifBody,
+          admin_url_template: adminNotifUrl,
+          cliente_titulo_template: clientNotifTitle,
+          cliente_cuerpo_template: clientNotifBody,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showNotification("success", "✅ ¡Plantillas de notificaciones guardadas exitosamente!");
+      } else {
+        showNotification("error", data.error || "No se pudo guardar la configuración.");
+      }
+    } catch {
+      showNotification("error", "Error de conexión al guardar plantillas.");
+    } finally {
+      setSavingNotifConfig(false);
+    }
+  };
+
+  const handleTestTemplate = async (sampleType: "admin" | "cliente") => {
+    try {
+      if (sampleType === "admin") setTestingAdminNotif(true);
+      else setTestingClientNotif(true);
+
       const res = await fetch("/api/notifications/test", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title: "🟢 Soul Store • Alerta de Prueba ✅",
-          body: "📦 ¡Prueba exitosa! Recibirás esta alerta cada vez que un cliente registre una compra.",
+          sampleType,
+          title: sampleType === "admin" ? adminNotifTitle : clientNotifTitle,
+          body: sampleType === "admin" ? adminNotifBody : clientNotifBody,
+          url: sampleType === "admin" ? adminNotifUrl : "/",
         }),
       });
+
       const data = await res.json();
       if (res.ok && data.delivered) {
-        showNotification("success", data.message || "Notificación de prueba enviada con éxito.");
+        showNotification("success", data.message || "Notificación de prueba enviada a tu teléfono.");
       } else {
-        showNotification("error", data.message || "No se pudo entregar la alerta de prueba.");
+        showNotification("error", data.message || "No se pudo entregar la alerta.");
       }
     } catch {
-      showNotification("error", "Error de red al probar notificación.");
+      showNotification("error", "Error al enviar alerta de prueba.");
     } finally {
-      setTestingPush(false);
+      setTestingAdminNotif(false);
+      setTestingClientNotif(false);
     }
   };
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const urlParams = new URLSearchParams(window.location.search);
+      const tabParam = urlParams.get("tab");
+      if (tabParam === "pedidos" || tabParam === "notificaciones" || tabParam === "catalogo") {
+        setActiveTab(tabParam as any);
+      }
+      const orderIdParam = urlParams.get("order_id");
+      if (orderIdParam) {
+        setHighlightOrderId(orderIdParam);
+      }
+    }
+    fetchNotifConfig();
+  }, []);
 
   // Crear o actualizar categoría
   const handleCreateCategory = async (e: React.FormEvent) => {
@@ -2360,6 +2445,18 @@ export default function AdminDashboardPage() {
                   </span>
                 )}
               </button>
+
+              <button
+                onClick={() => setActiveTab("notificaciones")}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
+                  activeTab === "notificaciones"
+                    ? "bg-fuchsia-600 text-white shadow-glow"
+                    : "text-slate-400 hover:text-white glass-panel"
+                }`}
+              >
+                <Bell className="w-4 h-4 text-[#FFF01F]" />
+                <span>Plantillas Notificaciones</span>
+              </button>
             </>
           )}
         </div>
@@ -2507,8 +2604,17 @@ export default function AdminDashboardPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/60 font-medium text-xs">
-                      {orders.map((o) => (
-                        <tr key={o.item_id} className="hover:bg-slate-900/40">
+                      {orders.map((o) => {
+                        const isHighlighted = highlightOrderId && (o.id === highlightOrderId || o.id.toLowerCase().startsWith(highlightOrderId.toLowerCase()) || highlightOrderId.toUpperCase().includes(o.id.slice(0, 8).toUpperCase()));
+                        return (
+                        <tr 
+                          key={o.item_id} 
+                          className={`transition-colors ${
+                            isHighlighted 
+                              ? "bg-fuchsia-950/60 border-y-2 border-fuchsia-400 shadow-xl ring-1 ring-fuchsia-400" 
+                              : "hover:bg-slate-900/40"
+                          }`}
+                        >
                           <td className="py-3.5 px-4 font-mono">
                             <span className="font-bold text-white block">
                               #SOUL-{o.id.slice(0, 8).toUpperCase()}
@@ -2636,7 +2742,8 @@ export default function AdminDashboardPage() {
                             </a>
                           </td>
                         </tr>
-                      ))}
+                      );
+                    })}
                     </tbody>
                   </table>
                 </div>
@@ -4707,6 +4814,406 @@ export default function AdminDashboardPage() {
                   ))}
               </div>
             )}
+          </div>
+        )}
+
+        {/* ======================================================== */}
+        {/* TAB 7: CENTRO DE NOTIFICACIONES PUSH & PLANTILLAS */}
+        {/* ======================================================== */}
+        {activeTab === "notificaciones" && (
+          <div className="space-y-6 animate-in fade-in duration-300">
+            {/* Header del Centro de Notificaciones */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h1 className="text-2xl font-black text-white flex items-center gap-2">
+                  <Bell className="w-6 h-6 text-[#FFF01F]" />
+                  <span>Centro de Notificaciones & Plantillas Push</span>
+                </h1>
+                <p className="text-xs text-slate-400 mt-1">
+                  Personaliza exactamente los mensajes que llegarán a tu teléfono como Administrador y los que recibirán tus Clientes al despachar sus pedidos.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleSaveNotifConfig}
+                  disabled={savingNotifConfig}
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#FFF01F] to-amber-400 hover:from-yellow-300 hover:to-amber-300 text-slate-950 font-black text-xs transition flex items-center gap-2 shadow-[0_0_20px_rgba(255,240,31,0.35)]"
+                >
+                  {savingNotifConfig ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-black" />
+                      <span>Guardando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-4 h-4 text-black" />
+                      <span>Guardar Plantillas</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Estado del Dispositivo Actual del Administrador */}
+            <div className={`p-4 rounded-2xl border transition-all ${
+              pushSubscribed 
+                ? "bg-emerald-950/20 border-emerald-500/40" 
+                : "bg-gradient-to-r from-amber-950/40 via-yellow-950/20 to-slate-900 border-amber-500/40"
+            }`}>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                    pushSubscribed ? "bg-emerald-500/20 text-emerald-400" : "bg-amber-500/20 text-amber-400"
+                  }`}>
+                    {pushSubscribed ? "🔔" : "⚠️"}
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                      <span>Estado de tu Teléfono / Dispositivo Actual</span>
+                      {pushSubscribed ? (
+                        <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-mono border border-emerald-500/30">
+                          CONECTADO & RECIBIENDO ALERTAS
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10px] font-mono border border-amber-500/30">
+                          ALERTAS NO ACTIVADAS EN ESTE DISPOSITIVO
+                        </span>
+                      )}
+                    </h3>
+                    <p className="text-xs text-slate-300 mt-0.5">
+                      {pushSubscribed
+                        ? "Tu navegador está enlazado a la base de datos de administradores. Cada vez que entre una orden o envíes una prueba, sonará y vibrará en tu pantalla."
+                        : "Toca el botón para registrar este teléfono en la base de datos y recibir las notificaciones push en tiempo real."}
+                    </p>
+                  </div>
+                </div>
+
+                {!pushSubscribed && (
+                  <button
+                    type="button"
+                    onClick={handleEnablePush}
+                    disabled={subscribingPush}
+                    className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#FFF01F] to-amber-400 hover:from-yellow-300 hover:to-amber-300 text-slate-950 font-black text-xs transition flex items-center gap-2 shrink-0 shadow-md"
+                  >
+                    {subscribingPush ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Conectando...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>📲</span>
+                        <span>Activar Alertas Aquí</span>
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Guía Rápida de Variables Disponibles */}
+            <div className="glass-panel p-4 rounded-2xl border border-slate-800 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-mono font-bold text-fuchsia-300 uppercase tracking-wider flex items-center gap-2">
+                  <Sparkles className="w-3.5 h-3.5 text-fuchsia-400" />
+                  <span>Variables Dinámicas Disponibles (Toca para copiar al portapapeles):</span>
+                </span>
+                <span className="text-[10px] text-slate-400 font-mono">Se sustituyen automáticamente con los datos del pedido</span>
+              </div>
+              <div className="flex flex-wrap gap-2 text-xs">
+                {[
+                  { tag: "{producto}", desc: "Juego o servicio (Ej: Free Fire)" },
+                  { tag: "{variante}", desc: "Variante/Paquete (Ej: 310+31)" },
+                  { tag: "{cliente}", desc: "Nombre del cliente" },
+                  { tag: "{pedido_id}", desc: "Código de la orden" },
+                  { tag: "{monto}", desc: "Monto total pagado" },
+                  { tag: "{moneda}", desc: "Moneda (USD, VES, MXN)" },
+                  { tag: "{metodo_pago}", desc: "Método de pago usado" },
+                  { tag: "{whatsapp}", desc: "WhatsApp del cliente" },
+                ].map((item) => (
+                  <button
+                    key={item.tag}
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard?.writeText(item.tag);
+                      showNotification("success", `Copiado "${item.tag}" al portapapeles. Pégalo donde quieras.`);
+                    }}
+                    className="p-1.5 px-2.5 rounded-xl bg-slate-900 border border-slate-800 hover:border-fuchsia-500/50 hover:bg-fuchsia-950/20 text-slate-200 transition text-[11px] flex items-center gap-1.5 group"
+                    title={`Hacer clic para copiar ${item.tag}`}
+                  >
+                    <code className="text-[#FFF01F] font-mono font-bold group-hover:text-yellow-300">{item.tag}</code>
+                    <span className="text-[10px] text-slate-400">({item.desc})</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Cuadrícula de 2 Columnas: Plantilla Admin y Plantilla Cliente */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+              {/* BLOQUE 1: PLANTILLA PARA EL ADMINISTRADOR */}
+              <div className="glass-panel p-5 rounded-2xl border border-slate-800 space-y-4 flex flex-col justify-between">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-yellow-500/20 border border-yellow-500/40 flex items-center justify-center text-sm">
+                        👑
+                      </div>
+                      <div>
+                        <h2 className="text-sm font-bold text-white">Alerta para Administrador</h2>
+                        <p className="text-[11px] text-slate-400">Mensaje que te llegará a tu teléfono cuando entre un nuevo pedido</p>
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-300 text-[10px] font-mono font-bold">
+                      NUEVO PEDIDO
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-mono text-slate-300 block mb-1 font-bold uppercase flex items-center justify-between">
+                      <span>Título de la Notificación *</span>
+                      <span className="text-[10px] text-slate-500 font-normal">Encabezado en el teléfono</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={adminNotifTitle}
+                      onChange={(e) => setAdminNotifTitle(e.target.value)}
+                      placeholder="Ej: 🟢 Nuevo Pedido: {producto} - {variante}"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 focus:border-[#FFF01F] text-xs text-white outline-none font-medium"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-mono text-slate-300 block mb-1 font-bold uppercase flex items-center justify-between">
+                      <span>Texto del Mensaje *</span>
+                      <span className="text-[10px] text-slate-500 font-normal">Cuerpo de la notificación</span>
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={adminNotifBody}
+                      onChange={(e) => setAdminNotifBody(e.target.value)}
+                      placeholder="Ej: 📦 Se registró un nuevo pedido de {cliente} por ${monto} {moneda} ({metodo_pago}). Toca aquí para revisar el comprobante y despachar."
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 focus:border-[#FFF01F] text-xs text-white outline-none resize-none leading-relaxed"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-mono text-slate-300 block mb-1 font-bold uppercase flex items-center justify-between">
+                      <span>Enlace al Tocar (Acción de Notificación)</span>
+                      <span className="text-[10px] text-slate-500 font-normal">A dónde te lleva al pulsar</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={adminNotifUrl}
+                      onChange={(e) => setAdminNotifUrl(e.target.value)}
+                      placeholder="/admin?tab=pedidos&order_id={pedido_id}"
+                      className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-700 focus:border-cyan-500 text-xs text-cyan-300 font-mono outline-none"
+                    />
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      Por defecto abre la pestaña de Pedidos enfocando la orden para revisar el comprobante bancario.
+                    </p>
+                  </div>
+
+                  {/* Vista Previa en Vivo (Simulación de teléfono) */}
+                  <div className="pt-2">
+                    <span className="text-[10px] font-mono text-slate-400 block mb-1.5 uppercase font-bold">
+                      📱 Vista Previa en tu Teléfono:
+                    </span>
+                    <div className="p-3.5 rounded-2xl bg-[#1e2029] border border-white/10 shadow-xl space-y-1">
+                      <div className="flex items-center gap-2">
+                        <img src="/icon.png" alt="Soul Store" className="w-5 h-5 rounded-md object-contain bg-black/40" />
+                        <span className="text-[11px] font-bold text-white tracking-wide">
+                          {interpolateTemplate(adminNotifTitle, {
+                            producto: "Free Fire",
+                            variante: "310+31 Diamantes",
+                            cliente: "Carlos La Rosa",
+                            pedido_id: "SOUL-428F078D",
+                            monto: "0.95",
+                            moneda: "USD",
+                            metodo_pago: "Pago Móvil",
+                          })}
+                        </span>
+                        <span className="text-[9px] text-slate-400 ml-auto font-mono">ahora</span>
+                      </div>
+                      <p className="text-[11px] text-slate-300 leading-snug pl-7">
+                        {interpolateTemplate(adminNotifBody, {
+                          producto: "Free Fire",
+                          variante: "310+31 Diamantes",
+                          cliente: "Carlos La Rosa",
+                          pedido_id: "SOUL-428F078D",
+                          monto: "0.95",
+                          moneda: "USD",
+                          metodo_pago: "Pago Móvil",
+                        })}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-3 border-t border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => handleTestTemplate("admin")}
+                    disabled={testingAdminNotif}
+                    className="w-full py-2.5 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-white font-bold text-xs transition flex items-center justify-center gap-2"
+                  >
+                    {testingAdminNotif ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-yellow-400" />
+                        <span>Enviando prueba a tu teléfono...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>🧪</span>
+                        <span>Probar Notificación de Admin en mi Teléfono</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* BLOQUE 2: PLANTILLA PARA EL CLIENTE */}
+              <div className="glass-panel p-5 rounded-2xl border border-slate-800 space-y-4 flex flex-col justify-between">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-sm">
+                        👤
+                      </div>
+                      <div>
+                        <h2 className="text-sm font-bold text-white">Alerta para el Cliente</h2>
+                        <p className="text-[11px] text-slate-400">Mensaje que recibirá el cliente cuando marques su orden como ENTREGADO</p>
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-mono font-bold">
+                      PEDIDO COMPLETADO
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-mono text-slate-300 block mb-1 font-bold uppercase flex items-center justify-between">
+                      <span>Título de la Notificación *</span>
+                      <span className="text-[10px] text-slate-500 font-normal">Encabezado en el teléfono</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={clientNotifTitle}
+                      onChange={(e) => setClientNotifTitle(e.target.value)}
+                      placeholder="Ej: 🟢 Soul Store • ¡Tu recarga de {producto} ({variante}) está lista! ✅"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 focus:border-emerald-500 text-xs text-white outline-none font-medium"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-mono text-slate-300 block mb-1 font-bold uppercase flex items-center justify-between">
+                      <span>Texto del Mensaje *</span>
+                      <span className="text-[10px] text-slate-500 font-normal">Cuerpo de la notificación</span>
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={clientNotifBody}
+                      onChange={(e) => setClientNotifBody(e.target.value)}
+                      placeholder="Ej: 🎉 ¡Hola {cliente}! Tu pedido #{pedido_id} de {producto} ({variante}) ha sido completado con éxito. Revisa tu cuenta."
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 focus:border-emerald-500 text-xs text-white outline-none resize-none leading-relaxed"
+                    />
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 text-[11px] text-slate-400">
+                    💡 <strong className="text-slate-200">Destino automático:</strong> Al hacer clic en esta notificación, el cliente es redirigido directamente a la portada de la tienda para confirmar su saldo.
+                  </div>
+
+                  {/* Vista Previa en Vivo (Simulación de teléfono) */}
+                  <div className="pt-2">
+                    <span className="text-[10px] font-mono text-slate-400 block mb-1.5 uppercase font-bold">
+                      📱 Vista Previa para el Cliente:
+                    </span>
+                    <div className="p-3.5 rounded-2xl bg-[#1e2029] border border-white/10 shadow-xl space-y-1">
+                      <div className="flex items-center gap-2">
+                        <img src="/icon.png" alt="Soul Store" className="w-5 h-5 rounded-md object-contain bg-black/40" />
+                        <span className="text-[11px] font-bold text-white tracking-wide">
+                          {interpolateTemplate(clientNotifTitle, {
+                            producto: "Free Fire",
+                            variante: "310+31 Diamantes",
+                            cliente: "Juan Pérez",
+                            pedido_id: "SOUL-428F078D",
+                          })}
+                        </span>
+                        <span className="text-[9px] text-slate-400 ml-auto font-mono">ahora</span>
+                      </div>
+                      <p className="text-[11px] text-slate-300 leading-snug pl-7">
+                        {interpolateTemplate(clientNotifBody, {
+                          producto: "Free Fire",
+                          variante: "310+31 Diamantes",
+                          cliente: "Juan Pérez",
+                          pedido_id: "SOUL-428F078D",
+                        })}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-3 border-t border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => handleTestTemplate("cliente")}
+                    disabled={testingClientNotif}
+                    className="w-full py-2.5 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-white font-bold text-xs transition flex items-center justify-center gap-2"
+                  >
+                    {testingClientNotif ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+                        <span>Enviando prueba a tu teléfono...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>🧪</span>
+                        <span>Probar Alerta de Cliente en mi Teléfono</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+            </div>
+
+            {/* Barra de Guardar Inferior */}
+            <div className="flex items-center justify-between pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setAdminNotifTitle(DEFAULT_NOTIFICATION_TEMPLATES.admin_titulo_template);
+                  setAdminNotifBody(DEFAULT_NOTIFICATION_TEMPLATES.admin_cuerpo_template);
+                  setAdminNotifUrl(DEFAULT_NOTIFICATION_TEMPLATES.admin_url_template);
+                  setClientNotifTitle(DEFAULT_NOTIFICATION_TEMPLATES.cliente_titulo_template);
+                  setClientNotifBody(DEFAULT_NOTIFICATION_TEMPLATES.cliente_cuerpo_template);
+                  showNotification("success", "Plantillas restablecidas a valores recomendados. Recuerda presionar Guardar.");
+                }}
+                className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs text-slate-400 hover:text-white transition"
+              >
+                ↺ Restaurar Valores por Defecto
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSaveNotifConfig}
+                disabled={savingNotifConfig}
+                className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#FFF01F] to-amber-400 hover:from-yellow-300 hover:to-amber-300 text-slate-950 font-black text-xs transition flex items-center gap-2 shadow-[0_0_20px_rgba(255,240,31,0.35)]"
+              >
+                {savingNotifConfig ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-black" />
+                    <span>Guardando cambios...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4 text-black" />
+                    <span>Guardar Todas las Plantillas</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         )}
       </main>

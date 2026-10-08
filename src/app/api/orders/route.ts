@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { createClient } from "@/lib/supabase/server";
 import { notifyAdmins } from "@/utils/web-push";
+import { interpolateTemplate, DEFAULT_NOTIFICATION_TEMPLATES } from "@/utils/notifications-template";
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -356,17 +357,42 @@ export async function POST(request: Request) {
       }
     }
 
-    // Notificar a los administradores estilo WhatsApp (await obligatorio en Serverless)
+    // Notificar a los administradores con plantilla personalizable (await obligatorio en Serverless)
     try {
+      const [cfg] = await sql`
+        SELECT admin_titulo_template, admin_cuerpo_template, admin_url_template
+        FROM public.notificaciones_config
+        WHERE id = 1
+      `;
+      const tituloTemplate = cfg?.admin_titulo_template || DEFAULT_NOTIFICATION_TEMPLATES.admin_titulo_template;
+      const cuerpoTemplate = cfg?.admin_cuerpo_template || DEFAULT_NOTIFICATION_TEMPLATES.admin_cuerpo_template;
+      const urlTemplate = cfg?.admin_url_template || DEFAULT_NOTIFICATION_TEMPLATES.admin_url_template;
+
+      const vars = {
+        producto: producto.nombre,
+        variante: variantName || "",
+        cliente: safeNombre,
+        pedido_id: `SOUL-${pedido.id.slice(0, 8).toUpperCase()}`,
+        monto: precioUsd,
+        moneda: safeMoneda,
+        metodo_pago: safeMetodoPagoNombre || "Transferencia",
+        whatsapp: safeWhatsapp,
+        jugador_id: safePlayerId || "",
+      };
+
+      const finalTitle = interpolateTemplate(tituloTemplate, vars);
+      const finalBody = interpolateTemplate(cuerpoTemplate, vars);
+      const finalUrl = interpolateTemplate(urlTemplate, vars) || `/admin?tab=pedidos&order_id=${pedido.id}`;
+
       await notifyAdmins({
-        title: "🟢 Soul Store • Nuevo Pedido",
-        body: `📦 #SOUL-${pedido.id.slice(0, 8).toUpperCase()} de ${safeNombre} por $${precioUsd} USD (${producto.nombre}${variantName ? " - " + variantName : ""}). Toca para ver y despachar.`,
-        url: "/admin",
+        title: finalTitle,
+        body: finalBody,
+        url: finalUrl,
         icon: "/icon.png",
         badge: "/badge.png",
         tag: `new-order-${pedido.id}`,
       });
-      console.log(`[WebPush] Notificación de nuevo pedido enviada a administradores para ${pedido.id}`);
+      console.log(`[WebPush] Notificación de nuevo pedido enviada a administradores: "${finalTitle}"`);
     } catch (pushErr) {
       console.error("[WebPush] Error enviando notificación push a administradores:", pushErr);
     }

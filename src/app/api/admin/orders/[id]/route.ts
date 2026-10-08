@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { sendPushNotification } from "@/utils/web-push";
+import { interpolateTemplate, DEFAULT_NOTIFICATION_TEMPLATES } from "@/utils/notifications-template";
 
 // Actualizar estado del pedido e items (ej: marcar como ENTREGADO o FALLIDO)
 export async function PATCH(
@@ -39,11 +40,20 @@ export async function PATCH(
       let orderInfo: any = null;
       if (safeItemId) {
         const [row] = await sql`
-          SELECT pi.id as item_id, pi.pedido_id, p.usuario_id, pi.producto_id, u.nickname, prod.nombre as producto_nombre
+          SELECT 
+            pi.id as item_id, 
+            pi.pedido_id, 
+            p.usuario_id, 
+            pi.producto_id, 
+            u.nickname, 
+            u.nombre as usuario_nombre,
+            prod.nombre as producto_nombre,
+            v.nombre as variante_nombre
           FROM public.pedidos_items pi
           JOIN public.pedidos p ON pi.pedido_id = p.id
           LEFT JOIN public.usuarios u ON p.usuario_id = u.id
           JOIN public.productos prod ON pi.producto_id = prod.id
+          LEFT JOIN public.variantes_producto v ON pi.variante_id = v.id
           WHERE pi.id = ${safeItemId}::uuid
           LIMIT 1
         `;
@@ -52,11 +62,20 @@ export async function PATCH(
 
       if (!orderInfo) {
         const [row] = await sql`
-          SELECT pi.id as item_id, pi.pedido_id, p.usuario_id, pi.producto_id, u.nickname, prod.nombre as producto_nombre
+          SELECT 
+            pi.id as item_id, 
+            pi.pedido_id, 
+            p.usuario_id, 
+            pi.producto_id, 
+            u.nickname, 
+            u.nombre as usuario_nombre,
+            prod.nombre as producto_nombre,
+            v.nombre as variante_nombre
           FROM public.pedidos_items pi
           JOIN public.pedidos p ON pi.pedido_id = p.id
           LEFT JOIN public.usuarios u ON p.usuario_id = u.id
           JOIN public.productos prod ON pi.producto_id = prod.id
+          LEFT JOIN public.variantes_producto v ON pi.variante_id = v.id
           WHERE p.id = ${id}::uuid
           ORDER BY pi.creado_en ASC
           LIMIT 1
@@ -77,17 +96,35 @@ export async function PATCH(
         `;
 
         if (orderInfo.usuario_id) {
-          // Notificar al cliente con estilo de mensaje de WhatsApp (await obligatorio en Serverless)
+          // Notificar al cliente con plantilla personalizable (await obligatorio en Serverless)
           try {
+            const [cfg] = await sql`
+              SELECT cliente_titulo_template, cliente_cuerpo_template
+              FROM public.notificaciones_config
+              WHERE id = 1
+            `;
+            const tituloTemplate = cfg?.cliente_titulo_template || DEFAULT_NOTIFICATION_TEMPLATES.cliente_titulo_template;
+            const cuerpoTemplate = cfg?.cliente_cuerpo_template || DEFAULT_NOTIFICATION_TEMPLATES.cliente_cuerpo_template;
+
+            const vars = {
+              producto: orderInfo.producto_nombre,
+              variante: orderInfo.variante_nombre || "",
+              cliente: orderInfo.usuario_nombre || orderInfo.nickname || "Cliente",
+              pedido_id: `SOUL-${orderInfo.pedido_id.slice(0, 8).toUpperCase()}`,
+            };
+
+            const finalTitle = interpolateTemplate(tituloTemplate, vars);
+            const finalBody = interpolateTemplate(cuerpoTemplate, vars);
+
             const sent = await sendPushNotification(orderInfo.usuario_id, {
-              title: "🟢 Soul Store • ¡Tu pedido está listo! ✅",
-              body: `🎉 ¡Hola! Tu recarga de "${orderInfo.producto_nombre}" ha sido entregada exitosamente. Revisa tu cuenta del juego o servicio.`,
+              title: finalTitle,
+              body: finalBody,
               url: "/",
               icon: "/icon.png",
               badge: "/badge.png",
               tag: `order-delivered-${orderInfo.pedido_id}`,
             });
-            console.log(`[Order Completion] Push enviado al cliente ${orderInfo.usuario_id}: ${sent}`);
+            console.log(`[Order Completion] Push personalizado enviado al cliente ${orderInfo.usuario_id}: ${sent}`);
           } catch (pushErr) {
             console.error("[Order Completion] Error enviando push al cliente:", pushErr);
           }
