@@ -84,6 +84,25 @@ export async function POST(
       WHERE id = ${id}::uuid
     `;
 
+    import("@/utils/web-push").then(async ({ sendPushNotification, notifyAdmins }) => {
+      if (es_admin) {
+        const [ticket] = await sql`SELECT usuario_id FROM public.tickets_soporte WHERE id = ${id}::uuid`;
+        if (ticket?.usuario_id) {
+          sendPushNotification(ticket.usuario_id, {
+            title: "Nuevo mensaje de Soporte",
+            body: mensaje.trim().substring(0, 100) + (mensaje.length > 100 ? "..." : ""),
+            url: "/dashboard",
+          }).catch(console.error);
+        }
+      } else {
+        notifyAdmins({
+          title: "Nuevo mensaje de Cliente en Soporte",
+          body: mensaje.trim().substring(0, 100) + (mensaje.length > 100 ? "..." : ""),
+          url: "/admin",
+        }).catch(console.error);
+      }
+    });
+
     return NextResponse.json({
       success: true,
       message: newMessage,

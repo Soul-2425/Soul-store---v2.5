@@ -47,7 +47,8 @@ export async function PATCH(
         precio_ref_ves = ${updatedRefVes},
         precio_fijo_ves = ${updatedFijoVes},
         precio_ref_mxn = ${updatedRefMxn},
-        precio_fijo_mxn = ${updatedFijoMxn}
+        precio_fijo_mxn = ${updatedFijoMxn},
+        requisitos_dinamicos = COALESCE(${body.requisitos_dinamicos !== undefined ? sql.json(body.requisitos_dinamicos) : null}, requisitos_dinamicos)
       WHERE id = ${id}
       RETURNING *
     `;

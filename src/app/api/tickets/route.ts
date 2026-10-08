@@ -142,6 +142,14 @@ export async function POST(request: Request) {
       )
     `;
 
+    import("@/utils/web-push").then(({ notifyAdmins }) => {
+      notifyAdmins({
+        title: "🎫 Nuevo Ticket de Soporte",
+        body: `Asunto: ${asunto_motivo.trim()}`,
+        url: "/admin",
+      }).catch(console.error);
+    });
+
     return NextResponse.json({
       success: true,
       message: `Ticket ${codigoTicket} creado exitosamente.`,

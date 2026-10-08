@@ -25,7 +25,8 @@ export async function PATCH(
       SET 
         nombre = ${updatedNombre},
         imagen_url = ${updatedImagen},
-        activo = ${updatedActivo}
+        activo = ${updatedActivo},
+        requisitos_dinamicos = COALESCE(${body.requisitos_dinamicos !== undefined ? sql.json(body.requisitos_dinamicos) : null}, requisitos_dinamicos)
       WHERE id = ${id}
       RETURNING *
     `;

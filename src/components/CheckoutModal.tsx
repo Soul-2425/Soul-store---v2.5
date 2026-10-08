@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { 
   X, 
   ShieldCheck, 
@@ -19,7 +19,10 @@ import {
   DollarSign,
   Heart,
   Sparkles,
-  Globe
+  Globe,
+  Eye,
+  EyeOff,
+  Key
 } from "lucide-react";
 import ImageUploadInput from "@/components/ImageUploadInput";
 
@@ -34,6 +37,7 @@ interface Product {
   precio_fijo_ves?: number | null;
   precio_ref_mxn?: number | null;
   precio_fijo_mxn?: number | null;
+  requisitos_dinamicos?: any[];
 }
 
 export interface VariantItem {
@@ -47,6 +51,7 @@ export interface VariantItem {
   precio_fijo_ves?: number | null;
   precio_ref_mxn?: number | null;
   precio_fijo_mxn?: number | null;
+  requisitos_dinamicos?: any[];
 }
 
 export interface UserProfile {
@@ -86,6 +91,8 @@ interface CheckoutModalProps {
   product: Product;
   variant?: VariantItem | null;
   variants?: VariantItem[];
+  category?: any;
+  subcategory?: any;
   tasaVes: number;
   tasaMxn: number;
   defaultCurrency?: "USD" | "VES" | "MXN";
@@ -97,6 +104,8 @@ export default function CheckoutModal({
   product,
   variant = null,
   variants = [],
+  category = null,
+  subcategory = null,
   tasaVes,
   tasaMxn,
   defaultCurrency = "USD",
@@ -109,6 +118,55 @@ export default function CheckoutModal({
   const [selectedSubVariant, setSelectedSubVariant] = useState<VariantItem | null>(
     variant || (variants && variants.length > 0 ? variants[0] : null)
   );
+
+  const activeVariant = selectedSubVariant || variant;
+
+  // Combinación jerárquica de campos dinámicos: Categoría -> Subcategoría -> Producto -> Variante
+  const allDynamicRequirements = useMemo(() => {
+    const list: Array<{ id: string; nombre: string; placeholder: string; tipo: "text" | "password" | "number"; obligatorio: boolean }> = [];
+    const seen = new Set<string>();
+
+    const addList = (arr?: any[]) => {
+      if (Array.isArray(arr)) {
+        for (const item of arr) {
+          if (item && item.nombre && item.nombre.trim()) {
+            const key = item.nombre.trim().toLowerCase();
+            if (!seen.has(key)) {
+              seen.add(key);
+              list.push({
+                id: item.id || key,
+                nombre: item.nombre.trim(),
+                placeholder: item.placeholder || `Escribe tu ${item.nombre.trim()}...`,
+                tipo: item.tipo === "password" || item.tipo === "number" ? item.tipo : "text",
+                obligatorio: item.obligatorio !== false,
+              });
+            }
+          }
+        }
+      }
+    };
+
+    if (category?.requisitos_dinamicos) addList(category.requisitos_dinamicos);
+    if (subcategory?.requisitos_dinamicos) addList(subcategory.requisitos_dinamicos);
+    if (product?.requisitos_dinamicos) addList(product.requisitos_dinamicos);
+    if (activeVariant?.requisitos_dinamicos) addList(activeVariant.requisitos_dinamicos);
+
+    // Fallback estándar si no hay campos dinámicos definidos en ninguna altura
+    if (list.length === 0) {
+      list.push({
+        id: "default_player_id",
+        nombre: "Player ID / Cuenta",
+        placeholder: "Ej: 816331100",
+        tipo: "text",
+        obligatorio: true,
+      });
+    }
+
+    return list;
+  }, [category, subcategory, product, activeVariant]);
+
+  const [dynamicValues, setDynamicValues] = useState<Record<string, string>>({});
+  const [showPasswordMap, setShowPasswordMap] = useState<Record<string, boolean>>({});
   const [moneda, setMoneda] = useState<"USD" | "VES" | "MXN">(defaultCurrency);
   const [playerId, setPlayerId] = useState("");
   
@@ -131,40 +189,7 @@ export default function CheckoutModal({
   const [comprobanteUrl, setComprobanteUrl] = useState("");
   const [referenciaPago, setReferenciaPago] = useState("");
 
-  // Detección exclusiva para Free Fire dentro de categoría Gaming
-  const isFreeFire = Boolean(
-    (product.categoria_nombre?.toLowerCase().includes("gaming") || false) &&
-    (
-      product.subcategoria_nombre?.toLowerCase().includes("free fire") ||
-      product.nombre?.toLowerCase().includes("free fire") ||
-      product.nombre?.toLowerCase().includes("diamante") ||
-      product.nombre?.toLowerCase().includes("pase booyah") ||
-      product.nombre?.toLowerCase().includes("100+10") ||
-      false
-    )
-  );
-
-  const [ffValidating, setFfValidating] = useState(false);
-  const [ffPlayer, setFfPlayer] = useState<{
-    nickname: string;
-    level?: string | number;
-    exp?: number;
-    region: string;
-    uid: string;
-    likes?: number;
-    avatarUrl?: string;
-    bannerUrl?: string;
-    clanName?: string;
-    clanLevel?: number;
-    headPic?: number | string | null;
-    rankingPoints?: number;
-    rank?: number;
-    csRank?: number;
-    csRankingPoints?: number;
-    signature?: string;
-    creditScore?: number;
-  } | null>(null);
-  const [ffError, setFfError] = useState<string | null>(null);
+  // Se removió temporalmente la lógica de verificación de Free Fire
 
   // Detección de duplicados
   const [checkingDuplicate, setCheckingDuplicate] = useState(false);
@@ -274,36 +299,7 @@ export default function CheckoutModal({
     return fallback;
   };
 
-  // Validación en vivo de Free Fire Player UID
-  const handleValidateFreeFire = async (uidOverride?: string) => {
-    const targetUid = (uidOverride !== undefined ? uidOverride : playerId).trim();
-    if (!targetUid || targetUid.length < 5) {
-      setFfError("Ingresa un Player ID válido (mínimo 5 dígitos).");
-      setFfPlayer(null);
-      return;
-    }
-
-    try {
-      setFfValidating(true);
-      setFfError(null);
-
-      const res = await fetch(`/api/freefire/validate?uid=${encodeURIComponent(targetUid)}`);
-      const data = await res.json();
-
-      if (data.success && data.valid && data.player) {
-        setFfPlayer(data.player);
-        setFfError(null);
-      } else {
-        setFfPlayer(null);
-        setFfError(data.error || `No se encontró cuenta en Free Fire con el ID ${targetUid}.`);
-      }
-    } catch {
-      setFfError("Error de conexión al consultar el servidor de Free Fire.");
-      setFfPlayer(null);
-    } finally {
-      setFfValidating(false);
-    }
-  };
+  // Validación en vivo de FF eliminada por solicitud del usuario
 
   // Verificar duplicado al terminar de escribir el Player ID
   const handleCheckDuplicate = async (idToCheck: string) => {
@@ -341,10 +337,17 @@ export default function CheckoutModal({
     e.preventDefault();
     setErrorMsg(null);
 
-    if (!playerId.trim()) {
-      setErrorMsg("Debes ingresar el ID de Jugador o Usuario de la cuenta.");
-      return;
+    // Validar todos los campos dinámicos obligatorios requeridos
+    for (const req of allDynamicRequirements) {
+      if (req.obligatorio) {
+        const val = dynamicValues[req.nombre] ?? (req.id === "default_player_id" ? playerId : "");
+        if (!val || !val.trim()) {
+          setErrorMsg(`El campo "${req.nombre}" es obligatorio.`);
+          return;
+        }
+      }
     }
+
     if (!nombre.trim()) {
       setErrorMsg("Por favor ingresa tu nombre de contacto.");
       return;
@@ -376,6 +379,29 @@ export default function CheckoutModal({
     try {
       setSubmitting(true);
 
+      const resolvedPlayerId = 
+        playerId.trim() || 
+        dynamicValues["Player ID / Cuenta"] || 
+        dynamicValues["ID de Jugador"] || 
+        dynamicValues["Player ID"] || 
+        dynamicValues["ID"] || 
+        Object.values(dynamicValues)[0] || 
+        "";
+
+      // Intentar obtener la suscripción push activa del navegador para vincularla a la orden
+      let pushSubJson: any = null;
+      try {
+        if (typeof window !== "undefined" && "serviceWorker" in navigator && "PushManager" in window) {
+          const reg = await navigator.serviceWorker.ready;
+          const sub = await reg.pushManager.getSubscription();
+          if (sub) {
+            pushSubJson = sub.toJSON();
+          }
+        }
+      } catch (pErr) {
+        console.warn("No se pudo obtener suscripción push para el pedido:", pErr);
+      }
+
       const res = await fetch("/api/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -384,19 +410,19 @@ export default function CheckoutModal({
           variante_id: selectedSubVariant?.id || undefined,
           moneda,
           moneda_pago: moneda,
-          player_id: playerId.trim(),
+          player_id: resolvedPlayerId,
+          datos_dinamicos: dynamicValues,
+          campos_dinamicos: dynamicValues,
+          push_subscription: pushSubJson,
+          push_endpoint: pushSubJson?.endpoint || (typeof window !== "undefined" ? localStorage.getItem("soul_push_endpoint") : null),
           nombre_cliente: nombre.trim(),
           cliente_nombre: nombre.trim(),
           whatsapp_cliente: whatsapp.trim(),
           cliente_whatsapp: whatsapp.trim(),
           email_cliente: email.trim() || undefined,
           cliente_email: email.trim() || undefined,
-          comentarios_adicionales: (ffPlayer 
-            ? `${comentarios.trim() ? comentarios.trim() + " | " : ""}Cuenta FF Verificada: ${ffPlayer.nickname}${ffPlayer.level ? ' (Nivel ' + ffPlayer.level + ')' : ''} [Región: ${ffPlayer.region}]`
-            : comentarios.trim()) || undefined,
-          comentarios: (ffPlayer 
-            ? `${comentarios.trim() ? comentarios.trim() + " | " : ""}Cuenta FF Verificada: ${ffPlayer.nickname}${ffPlayer.level ? ' (Nivel ' + ffPlayer.level + ')' : ''} [Región: ${ffPlayer.region}]`
-            : comentarios.trim()) || undefined,
+          comentarios_adicionales: comentarios.trim() || undefined,
+          comentarios: comentarios.trim() || undefined,
           es_override_duplicado: overrideDuplicate,
           override_duplicado: overrideDuplicate,
           metodo_pago_id: selectedMethod?.id || null,
@@ -431,9 +457,16 @@ export default function CheckoutModal({
 
   const getWhatsAppLink = () => {
     if (!orderResult) return "#";
+
+    const dynamicFieldsLines = Object.entries(dynamicValues)
+      .filter(([_, val]) => val && val.trim())
+      .map(([key, val]) => `${key}: ${val}`)
+      .join("\n");
+
     const text = encodeURIComponent(
       `¡Hola Soul Store! 👋 Acabo de generar mi orden *${orderResult.orderNumber}* para *${displayTitle}* por un total de *${orderResult.totalLocal} ${orderResult.moneda}*.\n\n` +
-      `Player ID: ${playerId || "N/A"}\nCliente: ${nombre}\nMétodo: ${selectedMethod?.nombre_metodo || "Transferencia"}\nReferencia: ${referenciaPago || "Adjunta"}\n\nAdjunto mi comprobante para que despachen mi recarga. ¡Muchas gracias!`
+      `${dynamicFieldsLines ? dynamicFieldsLines + "\n" : (playerId ? `Player ID: ${playerId}\n` : "")}` +
+      `Cliente: ${nombre}\nMétodo: ${selectedMethod?.nombre_metodo || "Transferencia"}\nReferencia: ${referenciaPago || "Adjunta"}\n\nAdjunto mi comprobante para que despachen mi recarga. ¡Muchas gracias!`
     );
     return `https://wa.me/584248901572?text=${text}`;
   };
@@ -661,218 +694,72 @@ export default function CheckoutModal({
                   </div>
                 </div>
 
-                {/* ID de Jugador / Cuenta (Con validador exclusivo para Free Fire en Gaming) */}
-                {isFreeFire ? (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <label className="text-[11px] font-mono text-slate-300 font-bold uppercase flex items-center gap-1.5">
-                        <span>Player ID (Free Fire UID) *</span>
-                        <span className="px-1.5 py-0.2 rounded bg-[#FF007F]/20 text-[#FF007F] text-[9px] font-mono font-bold border border-[#FF007F]/40">
-                          FREE FIRE
-                        </span>
-                      </label>
-                      {ffValidating && (
-                        <span className="text-[10px] text-[#FFF01F] flex items-center gap-1 font-mono">
-                          <Loader2 className="w-3 h-3 animate-spin" />
-                          <span>Validando ID en Garena...</span>
-                        </span>
-                      )}
-                    </div>
+                  {/* Campos Dinámicos Requeridos (Categoría, Subcategoría, Producto o Subproducto) */}
+                  <div className="space-y-3">
+                    {allDynamicRequirements.map((req, idx) => {
+                      const isIdField = /id|cuenta|player|uid/i.test(req.nombre);
+                      const isPasswordField = req.tipo === "password" || /clave|contrase|password/i.test(req.nombre);
+                      const currentValue = dynamicValues[req.nombre] ?? (req.id === "default_player_id" ? playerId : "");
+                      const showPassword = showPasswordMap[req.id || req.nombre] || false;
 
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        required
-                        value={playerId}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setPlayerId(val);
-                          setIsDuplicate(false);
-                          setOverrideDuplicate(false);
-                          setFfPlayer(null);
-                          setFfError(null);
-                        }}
-                        onBlur={(e) => {
-                          handleCheckDuplicate(e.target.value);
-                          if (e.target.value.trim().length >= 6 && !ffPlayer) {
-                            handleValidateFreeFire(e.target.value);
-                          }
-                        }}
-                        placeholder="Ej: 2579249340"
-                        className={`flex-1 px-3.5 py-2.5 rounded-xl bg-black/60 border text-sm text-white font-mono outline-none transition ${
-                          ffPlayer
-                            ? "border-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.3)]"
-                            : ffError
-                            ? "border-red-500/60"
-                            : "border-white/15 focus:border-[#FFF01F]"
-                        }`}
-                      />
-
-                      <button
-                        type="button"
-                        disabled={ffValidating || !playerId.trim()}
-                        onClick={() => handleValidateFreeFire()}
-                        className="px-5 py-2.5 rounded-xl bg-[#FFF01F] hover:bg-[#FFE600] disabled:opacity-40 text-black font-black text-xs transition flex items-center gap-1.5 shadow shrink-0"
-                      >
-                        {ffValidating ? (
-                          <>
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                            <span>Validando...</span>
-                          </>
-                        ) : (
-                          <span>Validar ID</span>
-                        )}
-                      </button>
-                    </div>
-
-                    {/* Estado de validación Free Fire con los 5 campos oficiales */}
-                    {ffPlayer && (
-                      <div className="p-3.5 rounded-2xl bg-gradient-to-br from-emerald-950/80 via-slate-900/90 to-black border border-emerald-500/60 shadow-[0_0_20px_rgba(16,185,129,0.2)] text-xs space-y-3 animate-in fade-in zoom-in-95 duration-200">
-                        {/* Cabecera de Verificación */}
-                        <div className="flex items-center justify-between border-b border-emerald-500/20 pb-2">
-                          <span className="text-[10px] font-mono font-bold text-emerald-400 uppercase flex items-center gap-1.5">
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                            Cuenta Oficial Verificada
-                          </span>
-                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-mono font-bold border border-emerald-500/40 flex items-center gap-1">
-                            <Sparkles className="w-2.5 h-2.5" />
-                            Activa ✓
-                          </span>
-                        </div>
-
-                        {/* Ficha del Jugador: Foto dentro del juego + Datos */}
-                        <div className="flex items-center gap-3">
-                          {/* 1. Foto de perfil dentro del juego (Avatar / HeadPic / Outfit) */}
-                          <div className="relative shrink-0">
-                            <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl overflow-hidden border-2 border-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.35)] bg-slate-950 flex items-center justify-center">
-                              <img
-                                src={ffPlayer.avatarUrl || `/api/freefire/avatar?uid=${encodeURIComponent(ffPlayer.uid)}&region=${encodeURIComponent(ffPlayer.region)}&name=${encodeURIComponent(ffPlayer.nickname)}`}
-                                alt={ffPlayer.nickname}
-                                className="w-full h-full object-cover"
-                                onError={(e) => {
-                                  e.currentTarget.src = `/api/freefire/avatar?name=${encodeURIComponent(ffPlayer.nickname)}`;
-                                }}
-                              />
-                            </div>
-                            {/* Insignia de Nivel superpuesta */}
-                            <div className="absolute -bottom-1 -right-1 px-1.5 py-0.2 rounded-md bg-[#FFF01F] text-black font-black text-[9px] font-mono shadow-md border border-black/40">
-                              Nv.{ffPlayer.level || 1}
-                            </div>
-                          </div>
-
-                          {/* 2. Nickname, Región, Likes y Clan */}
-                          <div className="min-w-0 flex-1 space-y-1">
-                            <div className="flex items-center gap-1.5">
-                              <h4 className="text-base sm:text-lg font-black text-white font-mono tracking-tight truncate leading-tight">
-                                {ffPlayer.nickname}
-                              </h4>
-                              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                            </div>
-
-                            {/* Metadatos: Región, Likes y Nivel */}
-                            <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-mono">
-                              {/* Región */}
-                              <span className="px-2 py-0.5 rounded bg-slate-800 text-cyan-300 font-bold border border-cyan-500/30 flex items-center gap-1 font-mono">
-                                <Globe className="w-3 h-3 text-cyan-400" />
-                                {ffPlayer.region}
+                      return (
+                        <div key={req.id || `field_${idx}`} className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <label className="text-[11px] font-mono text-slate-300 font-bold uppercase flex items-center gap-1.5">
+                              <span>{req.nombre}</span>
+                              {req.obligatorio && <span className="text-red-400 font-bold">*</span>}
+                            </label>
+                            {isIdField && checkingDuplicate && (
+                              <span className="text-[10px] text-[#FFF01F] flex items-center gap-1 font-mono">
+                                <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                                <span>Verificando...</span>
                               </span>
-
-                              {/* Nivel */}
-                              <span className="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-300 font-bold border border-amber-500/30">
-                                ⭐ Nv. {ffPlayer.level || "N/A"}
-                              </span>
-
-                              {/* Likes / Me gusta */}
-                              <span className="px-1.5 py-0.5 rounded bg-pink-500/10 text-pink-300 font-bold border border-pink-500/30 flex items-center gap-1">
-                                <Heart className="w-3 h-3 text-pink-400 fill-pink-500/30" />
-                                {Number(ffPlayer.likes || 0).toLocaleString()} Me gusta
-                              </span>
-                            </div>
-
-                            {/* Clan o UID */}
-                            <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 pt-0.5">
-                              <span>UID: <strong className="text-white">{playerId}</strong></span>
-                              {ffPlayer.clanName && (
-                                <span className="text-slate-300 truncate max-w-[140px]" title={ffPlayer.clanName}>
-                                  🛡️ {ffPlayer.clanName} {ffPlayer.clanLevel ? `(Nv. ${ffPlayer.clanLevel})` : ""}
-                                </span>
-                              )}
-                            </div>
-
-                            {/* Puntos de Rango BR y CS si están disponibles */}
-                            {(ffPlayer.rankingPoints || ffPlayer.csRankingPoints) && (
-                              <div className="flex items-center gap-2 pt-1 text-[10px] font-mono text-slate-300 border-t border-emerald-500/15">
-                                {ffPlayer.rankingPoints && (
-                                  <span className="text-amber-400">
-                                    🏆 BR: <strong className="text-white">{ffPlayer.rankingPoints.toLocaleString()}</strong> pts
-                                  </span>
-                                )}
-                                {ffPlayer.csRankingPoints && (
-                                  <span className="text-cyan-400">
-                                    ⚡ CS: <strong className="text-white">{ffPlayer.csRankingPoints.toLocaleString()}</strong> pts
-                                  </span>
-                                )}
-                                {ffPlayer.creditScore && (
-                                  <span className="text-emerald-400 ml-auto">
-                                    ✨ {ffPlayer.creditScore}/100 Honor
-                                  </span>
-                                )}
-                              </div>
                             )}
-
-                            {/* Firma / Bio del jugador */}
-                            {ffPlayer.signature && (
-                              <div className="text-[10px] italic text-slate-400 truncate pt-0.5" title={ffPlayer.signature}>
-                                💬 &ldquo;{ffPlayer.signature}&rdquo;
-                              </div>
+                          </div>
+                          
+                          <div className="relative">
+                            <input
+                              type={isPasswordField ? (showPassword ? "text" : "password") : (req.tipo || "text")}
+                              value={currentValue}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setDynamicValues((prev) => ({ ...prev, [req.nombre]: val }));
+                                if (req.id === "default_player_id" || isIdField) {
+                                  setPlayerId(val);
+                                  setIsDuplicate(false);
+                                  setOverrideDuplicate(false);
+                                }
+                              }}
+                              onBlur={(e) => {
+                                if (isIdField) {
+                                  handleCheckDuplicate(e.target.value);
+                                }
+                              }}
+                              placeholder={req.placeholder || `Ej: ${req.nombre}`}
+                              className={`w-full px-3.5 py-2.5 rounded-xl bg-black/60 border border-white/15 focus:border-[#FFF01F] text-sm text-white font-mono outline-none ${
+                                isPasswordField ? "pr-10" : ""
+                              }`}
+                            />
+                            {isPasswordField && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setShowPasswordMap((prev) => ({
+                                    ...prev,
+                                    [req.id || req.nombre]: !prev[req.id || req.nombre],
+                                  }))
+                                }
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1"
+                              >
+                                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                              </button>
                             )}
                           </div>
                         </div>
-
-                        {/* Mensaje de Confirmación */}
-                        <div className="pt-1.5 border-t border-emerald-500/20 text-[10px] text-emerald-300/80 font-mono flex items-center gap-1">
-                          <span>✓ Los diamantes se acreditarán de forma directa e inmediata a este perfil oficial.</span>
-                        </div>
-                      </div>
-                    )}
-
-                    {ffError && (
-                      <div className="p-3 rounded-2xl bg-red-950/60 border border-red-500/40 text-red-200 text-xs flex items-center gap-2">
-                        <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
-                        <div className="flex-1">
-                          <span>{ffError}</span>
-                        </div>
-                      </div>
-                    )}
+                      );
+                    })}
                   </div>
-                ) : (
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-[11px] font-mono text-slate-300 font-bold uppercase">
-                        Player ID / Cuenta *
-                      </label>
-                      {checkingDuplicate && (
-                        <span className="text-[10px] text-[#FFF01F] flex items-center gap-1 font-mono">
-                          <Loader2 className="w-2.5 h-2.5 animate-spin" />
-                          <span>Verificando...</span>
-                        </span>
-                      )}
-                    </div>
-                    <input
-                      type="text"
-                      required
-                      value={playerId}
-                      onChange={(e) => {
-                        setPlayerId(e.target.value);
-                        setIsDuplicate(false);
-                        setOverrideDuplicate(false);
-                      }}
-                      onBlur={(e) => handleCheckDuplicate(e.target.value)}
-                      placeholder="Ej: 816331100"
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-black/60 border border-white/15 focus:border-[#FFF01F] text-sm text-white font-mono outline-none"
-                    />
-                  </div>
-                )}
+
 
                 {/* Alerta de duplicados */}
                 {isDuplicate && (

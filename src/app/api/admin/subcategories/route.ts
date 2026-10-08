@@ -25,7 +25,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { categoria_id, nombre, slug, imagen_url, activo } = body;
+    const { categoria_id, nombre, slug, imagen_url, activo, requisitos_dinamicos } = body;
 
     if (!categoria_id || !nombre) {
       return NextResponse.json(
@@ -42,13 +42,14 @@ export async function POST(request: Request) {
         .replace(/(^-|-$)+/g, "")}-${Date.now().toString().slice(-4)}`;
 
     const [newSubcat] = await sql`
-      INSERT INTO public.subcategorias (categoria_id, nombre, slug, imagen_url, activo)
+      INSERT INTO public.subcategorias (categoria_id, nombre, slug, imagen_url, activo, requisitos_dinamicos)
       VALUES (
         ${categoria_id},
         ${nombre},
         ${finalSlug},
         ${imagen_url || null},
-        ${activo === false ? false : true}
+        ${activo === false ? false : true},
+        ${requisitos_dinamicos ? sql.json(requisitos_dinamicos) : sql.json([])}
       )
       RETURNING *
     `;

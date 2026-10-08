@@ -54,16 +54,16 @@ export default async function HomePage() {
       }
     }
 
-    // 2. Catálogo público
+    // 2. Catálogo público con campos dinámicos para el checkout
     categories = await sql`
-      SELECT id, nombre, slug, imagen_url 
+      SELECT id, nombre, slug, imagen_url, COALESCE(requisitos_dinamicos, '[]'::jsonb) as requisitos_dinamicos 
       FROM public.categorias 
       WHERE activo = TRUE 
       ORDER BY orden ASC, creado_en DESC
     `;
 
     subcategories = await sql`
-      SELECT id, categoria_id, nombre, slug, imagen_url, activo, orden
+      SELECT id, categoria_id, nombre, slug, imagen_url, activo, orden, COALESCE(requisitos_dinamicos, '[]'::jsonb) as requisitos_dinamicos
       FROM public.subcategorias
       WHERE activo = TRUE
       ORDER BY orden ASC, creado_en DESC
@@ -73,6 +73,7 @@ export default async function HomePage() {
       SELECT p.id, p.nombre, p.slug, p.descripcion, p.imagen_url, p.imagen_oferta_url,
              p.precio_base, p.costo_proveedor, p.oferta_especial, 
              p.precio_ref_ves, p.precio_fijo_ves, p.precio_ref_mxn, p.precio_fijo_mxn,
+             COALESCE(p.requisitos_dinamicos, '[]'::jsonb) as requisitos_dinamicos,
              COALESCE(c.nombre, 'General') as categoria_nombre, 
              COALESCE(c.id, s.categoria_id) as categoria_id,
              COALESCE(s.nombre, 'General') as subcategoria_nombre,
@@ -86,7 +87,8 @@ export default async function HomePage() {
 
     variants = await sql`
       SELECT id, producto_id, nombre, sku, costo_proveedor, precio_base, activo, imagen_url, orden,
-             precio_ref_ves, precio_fijo_ves, precio_ref_mxn, precio_fijo_mxn
+             precio_ref_ves, precio_fijo_ves, precio_ref_mxn, precio_fijo_mxn,
+             COALESCE(requisitos_dinamicos, '[]'::jsonb) as requisitos_dinamicos
       FROM public.variantes_producto
       WHERE activo = TRUE
       ORDER BY orden ASC, creado_en ASC

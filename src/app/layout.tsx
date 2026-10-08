@@ -13,6 +13,8 @@ export const viewport: Viewport = {
   themeColor: "#D61A1A",
 };
 
+import PushNotificationManager from "@/components/PushNotificationManager";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -21,6 +23,7 @@ export default function RootLayout({
   return (
     <html lang="es" className="dark">
       <body className="min-h-screen text-white antialiased selection:bg-[#FF007F] selection:text-white">
+        <PushNotificationManager />
         {children}
       </body>
     </html>

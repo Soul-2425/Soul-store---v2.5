@@ -4,7 +4,7 @@ import { sql } from "@/lib/db";
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { nombre, slug, imagen_url, activo } = body;
+    const { nombre, slug, imagen_url, activo, requisitos_dinamicos } = body;
 
     if (!nombre) {
       return NextResponse.json({ error: "El nombre es obligatorio" }, { status: 400 });
@@ -18,12 +18,13 @@ export async function POST(request: Request) {
         .replace(/(^-|-$)+/g, "");
 
     const [newCategory] = await sql`
-      INSERT INTO public.categorias (nombre, slug, imagen_url, activo)
+      INSERT INTO public.categorias (nombre, slug, imagen_url, activo, requisitos_dinamicos)
       VALUES (
         ${nombre}, 
         ${finalSlug}, 
         ${imagen_url || null}, 
-        ${activo !== undefined ? activo : true}
+        ${activo !== undefined ? activo : true},
+        ${requisitos_dinamicos ? sql.json(requisitos_dinamicos) : sql.json([])}
       )
       RETURNING *
     `;

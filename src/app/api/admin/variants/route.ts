@@ -17,6 +17,7 @@ export async function POST(request: Request) {
       precio_fijo_ves,
       precio_ref_mxn,
       precio_fijo_mxn,
+      requisitos_dinamicos,
       overrides,
     } = body;
 
@@ -39,7 +40,8 @@ export async function POST(request: Request) {
         precio_ref_mxn,
         precio_fijo_mxn,
         imagen_url,
-        activo
+        activo,
+        requisitos_dinamicos
       )
       VALUES (
         ${producto_id},
@@ -52,7 +54,8 @@ export async function POST(request: Request) {
         ${parseFloat(precio_ref_mxn) || null},
         ${parseFloat(precio_fijo_mxn) || null},
         ${imagen_url || null},
-        ${activo === false ? false : true}
+        ${activo === false ? false : true},
+        ${requisitos_dinamicos ? sql.json(requisitos_dinamicos) : sql.json([])}
       )
       RETURNING *
     `;

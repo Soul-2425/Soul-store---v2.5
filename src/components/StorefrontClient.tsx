@@ -37,6 +37,7 @@ interface Category {
   nombre: string;
   slug: string;
   imagen_url: string | null;
+  requisitos_dinamicos?: any[];
 }
 
 interface Subcategory {
@@ -46,6 +47,7 @@ interface Subcategory {
   slug: string;
   imagen_url: string | null;
   activo?: boolean;
+  requisitos_dinamicos?: any[];
 }
 
 export interface ProductVariant {
@@ -62,6 +64,7 @@ export interface ProductVariant {
   precio_fijo_ves?: number | null;
   precio_ref_mxn?: number | null;
   precio_fijo_mxn?: number | null;
+  requisitos_dinamicos?: any[];
 }
 
 interface Product {
@@ -82,6 +85,7 @@ interface Product {
   precio_fijo_ves?: number | null;
   precio_ref_mxn?: number | null;
   precio_fijo_mxn?: number | null;
+  requisitos_dinamicos?: any[];
 }
 
 interface UserProfile {
@@ -117,11 +121,11 @@ type Currency = "USD" | "VES" | "MXN";
 function GraffitiTag({ className = "", style = {} }: { className?: string; style?: React.CSSProperties }) {
   return (
     <div 
-      className={`font-graffiti select-none pointer-events-none tracking-normal uppercase font-black leading-[0.8] text-center text-[#FF007F] drop-shadow-[0_2px_10px_rgba(255,0,127,0.7)] ${className}`}
+      className={`font-graffiti select-none pointer-events-none tracking-normal uppercase font-black leading-[0.8] text-center text-[#FF007F] drop-shadow-[0_2px_15px_rgba(255,0,127,0.25)] ${className}`}
       style={style}
     >
-      <div className="text-6xl sm:text-7xl md:text-8xl lg:text-9xl tracking-tight">SOUL</div>
-      <div className="text-6xl sm:text-7xl md:text-8xl lg:text-9xl tracking-tight -mt-2">STORE</div>
+      <div className="text-6xl sm:text-7xl md:text-8xl lg:text-9xl tracking-tight opacity-75">SOUL</div>
+      <div className="text-6xl sm:text-7xl md:text-8xl lg:text-9xl tracking-tight -mt-2 opacity-75">STORE</div>
     </div>
   );
 }
@@ -446,19 +450,19 @@ export default function StorefrontClient({
         <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/25 pointer-events-none" />
 
         {/* Letras rosadas de Graffiti elegantes integradas en la pared oscura */}
-        <div className="absolute top-[8%] -left-6 md:left-6 animate-graffiti-1 opacity-30 mix-blend-screen">
+        <div className="absolute top-[8%] -left-6 md:left-6 animate-graffiti-1 opacity-[0.08] mix-blend-screen">
           <GraffitiTag />
         </div>
 
-        <div className="absolute top-[14%] -right-10 md:right-10 animate-graffiti-2 opacity-25 mix-blend-screen">
+        <div className="absolute top-[14%] -right-10 md:right-10 animate-graffiti-2 opacity-[0.06] mix-blend-screen">
           <GraffitiTag />
         </div>
 
-        <div className="absolute top-[56%] -left-10 md:left-8 animate-graffiti-3 opacity-25 mix-blend-screen">
+        <div className="absolute top-[56%] -left-10 md:left-8 animate-graffiti-3 opacity-[0.06] mix-blend-screen">
           <GraffitiTag />
         </div>
 
-        <div className="absolute top-[64%] -right-10 md:right-8 animate-graffiti-4 opacity-30 mix-blend-screen">
+        <div className="absolute top-[64%] -right-10 md:right-8 animate-graffiti-4 opacity-[0.08] mix-blend-screen">
           <GraffitiTag />
         </div>
       </div>
@@ -473,7 +477,7 @@ export default function StorefrontClient({
           <div className="flex items-center gap-3 sm:gap-4">
             <button 
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-1.5 rounded-full hover:bg-white/10 text-white transition"
+              className="md:hidden p-1.5 rounded-full hover:bg-white/10 text-white transition"
               aria-label="Abrir Menú"
             >
               <Menu className="w-5 h-5 sm:w-6 sm:h-6" />
@@ -570,9 +574,9 @@ export default function StorefrontClient({
               <ShoppingCart className="w-5 h-5" />
             </button>
 
-            {/* Botón Ingresar / Perfil / Admin */}
+            {/* Botón Ingresar / Perfil / Admin - OCULTO EN MÓVIL (pasa exclusivamente al menú hamburguesa) */}
             {currentUser ? (
-              <div className="flex items-center gap-1.5">
+              <div className="hidden md:flex items-center gap-1.5">
                 {currentUser.rango === "admin" && (
                   <Link
                     href="/admin"
@@ -580,7 +584,7 @@ export default function StorefrontClient({
                     title="Panel Administrativo"
                   >
                     <Crown className="w-3.5 h-3.5 text-[#D61A1A]" />
-                    <span className="hidden sm:inline">ADMIN</span>
+                    <span>ADMIN</span>
                   </Link>
                 )}
 
@@ -606,7 +610,7 @@ export default function StorefrontClient({
             ) : (
               <Link
                 href="/login"
-                className="hidden sm:inline-flex px-4 py-1.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/15 text-white text-xs font-semibold transition"
+                className="hidden md:inline-flex px-4 py-1.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/15 text-white text-xs font-semibold transition"
               >
                 Ingresar
               </Link>
@@ -618,91 +622,115 @@ export default function StorefrontClient({
 
       {/* Menú móvil desplegable */}
       {mobileMenuOpen && (
-        <div className="fixed inset-0 z-50 bg-[#0B0D13]/95 backdrop-blur-md flex flex-col p-6 text-white md:hidden">
-          <div className="flex items-center justify-between pb-6 border-b border-white/10">
+        <div className="fixed inset-0 z-50 bg-[#0B0D13]/98 backdrop-blur-xl flex flex-col p-6 text-white md:hidden overflow-y-auto">
+          <div className="flex items-center justify-between pb-5 border-b border-white/10">
             <div className="flex items-center gap-2">
               <Flame className="w-6 h-6 text-[#FFF01F]" />
               <span className="font-extrabold text-lg">Soul Store</span>
             </div>
             <button 
               onClick={() => setMobileMenuOpen(false)}
-              className="p-2 rounded-xl bg-white/10"
+              className="p-2 rounded-xl bg-white/10 hover:bg-white/20 transition"
+              aria-label="Cerrar menú"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
 
-          <div className="flex flex-col gap-4 py-6 text-lg font-bold">
+          {/* Tarjeta de Perfil en Móvil (Botón S y Datos de Usuario) */}
+          {currentUser && (
+            <div className="mt-5 p-4 rounded-2xl bg-gradient-to-br from-white/10 via-white/5 to-transparent border border-white/15 flex items-center justify-between gap-3 shadow-xl">
+              <div className="flex items-center gap-3">
+                <div 
+                  className="w-11 h-11 rounded-full bg-gradient-to-tr from-[#FF007F] to-[#FFF01F] flex items-center justify-center text-sm font-black text-black border-2 border-white/30 shadow-lg shrink-0"
+                >
+                  {currentUser.nickname ? currentUser.nickname[0].toUpperCase() : "S"}
+                </div>
+                <div className="min-w-0">
+                  <p className="font-extrabold text-sm text-white truncate">{currentUser.nickname}</p>
+                  <span className="inline-block px-2 py-0.5 rounded-md bg-[#FFF01F]/20 text-[#FFF01F] text-[10px] font-mono font-bold uppercase border border-[#FFF01F]/30">
+                    {currentUser.rango}
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={async () => {
+                  await supabase.auth.signOut();
+                  setCurrentUser(null);
+                  setMobileMenuOpen(false);
+                  window.location.reload();
+                }}
+                className="p-2 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/30 transition shrink-0"
+                title="Cerrar sesión"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
+          {/* Botón Destacado de Panel Administrador (Solo si es Admin) */}
+          {currentUser?.rango === "admin" && (
+            <Link 
+              href="/admin" 
+              onClick={() => setMobileMenuOpen(false)}
+              className="mt-3 w-full p-3.5 rounded-2xl bg-gradient-to-r from-[#FFF01F] via-yellow-400 to-amber-500 text-slate-950 font-black flex items-center justify-between shadow-[0_0_20px_rgba(255,240,31,0.3)] hover:scale-[1.02] active:scale-[0.98] transition"
+            >
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-black/15 flex items-center justify-center">
+                  <Crown className="w-5 h-5 text-red-600" />
+                </div>
+                <span className="text-sm uppercase tracking-wide">Panel Administrador</span>
+              </div>
+              <span className="text-[10px] font-mono font-black bg-black text-yellow-400 px-2 py-1 rounded-lg">
+                ACCEDER
+              </span>
+            </Link>
+          )}
+
+          <div className="flex flex-col gap-3 py-6 text-base font-bold">
             <a 
               href="#inicio" 
               onClick={() => setMobileMenuOpen(false)}
-              className="text-[#FF007F] flex items-center justify-between"
+              className="text-[#FF007F] flex items-center justify-between p-2 rounded-xl hover:bg-white/5 transition"
             >
               <span>Inicio</span>
               <span className="w-2 h-2 rounded-full bg-[#FF007F]"></span>
             </a>
             <button 
               onClick={() => { setMobileMenuOpen(false); setContactModalOpen(true); }}
-              className="text-left text-white/90"
+              className="text-left text-white/90 p-2 rounded-xl hover:bg-white/5 transition"
             >
               Contáctanos
             </button>
             <button 
               onClick={() => { setMobileMenuOpen(false); setAboutModalOpen(true); }}
-              className="text-left text-white/90"
+              className="text-left text-white/90 p-2 rounded-xl hover:bg-white/5 transition"
             >
               Soporte y Garantías
             </button>
             <Link 
               href="/tickets" 
               onClick={() => setMobileMenuOpen(false)}
-              className="text-left text-white/90"
+              className="text-left text-white/90 p-2 rounded-xl hover:bg-white/5 transition"
             >
               Mis Tickets de Soporte
             </Link>
-            {currentUser?.rango === "admin" && (
-              <Link 
-                href="/admin" 
-                onClick={() => setMobileMenuOpen(false)}
-                className="text-[#FFF01F] font-black flex items-center gap-2"
-              >
-                <Crown className="w-5 h-5 text-[#D61A1A]" />
-                <span>Panel Administrador</span>
-              </Link>
-            )}
           </div>
 
-          <div className="mt-auto pt-6 border-t border-white/10 flex flex-col gap-3">
-            {currentUser ? (
-              <div className="flex items-center justify-between bg-white/5 p-3 rounded-2xl">
-                <div>
-                  <p className="font-bold text-sm text-white">{currentUser.nickname}</p>
-                  <p className="text-xs text-[#FFF01F] uppercase font-mono">{currentUser.rango}</p>
-                </div>
-                <button
-                  onClick={async () => {
-                    await supabase.auth.signOut();
-                    setCurrentUser(null);
-                    setMobileMenuOpen(false);
-                  }}
-                  className="px-3 py-1.5 rounded-xl bg-red-600/40 text-red-200 text-xs font-bold"
-                >
-                  Salir
-                </button>
-              </div>
-            ) : (
+          <div className="mt-auto pt-6 border-t border-white/10">
+            {!currentUser && (
               <div className="grid grid-cols-2 gap-3">
                 <Link
                   href="/login"
                   onClick={() => setMobileMenuOpen(false)}
-                  className="py-3 text-center rounded-xl bg-white/10 font-bold text-sm"
+                  className="py-3 text-center rounded-xl bg-white/10 hover:bg-white/15 font-bold text-sm transition"
                 >
                   Iniciar Sesión
                 </Link>
                 <Link
                   href="/register"
                   onClick={() => setMobileMenuOpen(false)}
-                  className="py-3 text-center rounded-xl bg-[#FF007F] font-bold text-sm text-white"
+                  className="py-3 text-center rounded-xl bg-gradient-to-r from-[#FF007F] to-[#7928CA] font-bold text-sm text-white shadow-lg transition"
                 >
                   Registrarse
                 </Link>
@@ -1235,6 +1263,8 @@ export default function StorefrontClient({
         <CheckoutModal
           product={selectedProduct}
           variant={selectedVariant}
+          category={categories.find((c) => c.id === selectedProduct.categoria_id)}
+          subcategory={subcategories?.find((sc) => sc.id === selectedProduct.subcategoria_id)}
           variants={variantsList.filter((v) => v.producto_id === selectedProduct.id && v.activo !== false)}
           tasaVes={tasaVes}
           tasaMxn={tasaMxn}

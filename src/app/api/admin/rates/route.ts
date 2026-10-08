@@ -37,10 +37,7 @@ export async function GET() {
         solo_trading_mxn,
         solo_pro_mxn,
         sin_verif_mxn,
-        -- FREE FIRE API
-        freefire_api_key,
-        freefire_api_url,
-        freefire_default_region
+
       FROM public.tasas_cambio
       WHERE id = 1
     `;
@@ -81,11 +78,7 @@ export async function GET() {
         solo_pro: Boolean(tasas.solo_pro_mxn),
         sin_verif: Boolean(tasas.sin_verif_mxn),
       },
-      freefire: {
-        api_key: tasas.freefire_api_key || "",
-        api_url: tasas.freefire_api_url || "http://siambhau69.eu.cc",
-        default_region: tasas.freefire_default_region || "US",
-      },
+
     });
   } catch (error: any) {
     console.error("Error al obtener tasas admin:", error);
@@ -128,10 +121,7 @@ export async function PATCH(request: Request) {
       solo_trading_mxn,
       solo_pro_mxn,
       sin_verif_mxn,
-      // FREE FIRE
-      freefire_api_key,
-      freefire_api_url,
-      freefire_default_region,
+
     } = body;
 
     const [current] = await sql`
@@ -169,10 +159,7 @@ export async function PATCH(request: Request) {
     const newSoloProMxn = solo_pro_mxn !== undefined ? Boolean(solo_pro_mxn) : Boolean(current.solo_pro_mxn);
     const newSinVerifMxn = sin_verif_mxn !== undefined ? Boolean(sin_verif_mxn) : Boolean(current.sin_verif_mxn);
 
-    // FREE FIRE
-    const newFfKey = freefire_api_key !== undefined ? (freefire_api_key ? String(freefire_api_key).trim() : null) : current.freefire_api_key;
-    const newFfUrl = freefire_api_url !== undefined ? (freefire_api_url ? String(freefire_api_url).trim() : "http://siambhau69.eu.cc") : (current.freefire_api_url || "http://siambhau69.eu.cc");
-    const newFfRegion = freefire_default_region !== undefined ? (freefire_default_region ? String(freefire_default_region).trim().toUpperCase() : "US") : (current.freefire_default_region || "US");
+
 
     await sql`
       UPDATE public.tasas_cambio
@@ -205,10 +192,7 @@ export async function PATCH(request: Request) {
         solo_trading_mxn = ${newSoloTradingMxn},
         solo_pro_mxn = ${newSoloProMxn},
         sin_verif_mxn = ${newSinVerifMxn},
-        -- FREE FIRE
-        freefire_api_key = ${newFfKey},
-        freefire_api_url = ${newFfUrl},
-        freefire_default_region = ${newFfRegion},
+
         ultima_actualizacion = NOW()
       WHERE id = 1
     `;

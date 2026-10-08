@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { createClient } from "@/lib/supabase/server";
-
+import { notifyAdmins } from "@/utils/web-push";
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -32,8 +32,13 @@ export async function POST(request: Request) {
     const safeNombre = (cliente_nombre || nombre_cliente || "").trim();
     const safeWhatsapp = (cliente_whatsapp || whatsapp_cliente || "").trim();
     const safeEmail = (cliente_email || email_cliente ? (cliente_email || email_cliente).trim() : null);
-    const safePlayerId = player_id ? player_id.trim() : null;
-    const safeRegion = region ? region.trim() : "Global";
+    const camposDinamicosBody = body.datos_dinamicos || body.campos_dinamicos || {};
+    const safePlayerId = player_id 
+      ? player_id.trim() 
+      : (camposDinamicosBody["ID de Jugador"] || camposDinamicosBody["Player ID"] || camposDinamicosBody["ID"] || camposDinamicosBody["id"] || null);
+    const safeRegion = region 
+      ? region.trim() 
+      : (camposDinamicosBody["Región"] || camposDinamicosBody["Region"] || "Global");
     const safeComentarios = (comentarios || comentarios_adicionales ? (comentarios || comentarios_adicionales).trim() : null);
     const safeOverride = Boolean(es_override_duplicado || override_duplicado || false);
     const safeVarianteId = variante_id ? String(variante_id).trim() : null;
@@ -41,6 +46,7 @@ export async function POST(request: Request) {
     const safeMetodoPagoNombre = metodo_pago_nombre ? String(metodo_pago_nombre).trim() : null;
     const safeComprobanteUrl = comprobante_url ? String(comprobante_url).trim() : null;
     const safeReferenciaPago = referencia_pago ? String(referencia_pago).trim() : null;
+    const pushEndpoint = body.push_endpoint ? String(body.push_endpoint).trim() : null;
 
     if (!producto_id) {
       return NextResponse.json({ error: "El producto es obligatorio." }, { status: 400 });
@@ -274,13 +280,14 @@ export async function POST(request: Request) {
       RETURNING *
     `;
 
-    // 6. Insertar Detalle / Sub-orden en pedidos_items
+    // 6. Insertar Detalle / Sub-orden en pedidos_items con todos los campos dinámicos
     const datosDinamicos = {
       region: safeRegion,
       cliente_nombre: safeNombre,
       cliente_whatsapp: safeWhatsapp,
       cliente_email: safeEmail,
       variante_nombre: variantName,
+      ...(typeof camposDinamicosBody === "object" ? camposDinamicosBody : {}),
     };
 
     const [item] = await sql`
@@ -312,6 +319,52 @@ export async function POST(request: Request) {
       )
       RETURNING *
     `;
+
+    // Vincular o registrar la suscripción push del cliente a su usuario recién registrado/asignado
+    const pushSub = body.push_subscription || (body.subscription ? body.subscription : null);
+    if (pushSub && pushSub.endpoint && pushSub.keys) {
+      try {
+        await sql`
+          INSERT INTO public.push_subscriptions (user_id, endpoint, p256dh, auth, user_agent, created_at)
+          VALUES (
+            ${finalUserId}::uuid,
+            ${pushSub.endpoint},
+            ${pushSub.keys.p256dh},
+            ${pushSub.keys.auth},
+            ${request.headers.get("user-agent") || "Customer Device"},
+            NOW()
+          )
+          ON CONFLICT (endpoint) DO UPDATE 
+          SET user_id = ${finalUserId}::uuid,
+              p256dh = EXCLUDED.p256dh,
+              auth = EXCLUDED.auth
+        `;
+        console.log(`[WebPush] Suscripción directa del cliente guardada y enlazada con éxito a ${finalUserId}`);
+      } catch (err) {
+        console.error("[WebPush] Error guardando suscripción push directa:", err);
+      }
+    } else if (pushEndpoint) {
+      try {
+        await sql`
+          UPDATE public.push_subscriptions 
+          SET user_id = ${finalUserId}::uuid 
+          WHERE endpoint = ${pushEndpoint}
+        `;
+        console.log(`[WebPush] Suscripción del cliente vinculada exitosamente al usuario ${finalUserId}`);
+      } catch (err) {
+        console.error("[WebPush] Error vinculando suscripción al usuario:", err);
+      }
+    }
+
+    // Notificar a los administradores estilo WhatsApp
+    notifyAdmins({
+      title: "🟢 Soul Store • Nuevo Pedido",
+      body: `📦 *#SOUL-${pedido.id.slice(0, 8).toUpperCase()}* de ${safeNombre} por *$${precioUsd} USD* (${producto.nombre}${variantName ? " - " + variantName : ""}). Toca para ver y despachar.`,
+      url: "/admin",
+      icon: "/images/whatsapp-icon.png",
+      badge: "/badge.png",
+      tag: `new-order-${pedido.id}`,
+    }).catch(console.error);
 
     return NextResponse.json(
       {

@@ -51,6 +51,8 @@ import {
   Gamepad2
 } from "lucide-react";
 import ImageUploadInput from "@/components/ImageUploadInput";
+import DynamicFieldsBuilder, { DynamicFieldItem } from "@/components/DynamicFieldsBuilder";
+import { subscribeCurrentDevice } from "@/components/PushNotificationManager";
 
 interface Category {
   id: string;
@@ -59,6 +61,7 @@ interface Category {
   imagen_url: string | null;
   activo: boolean;
   orden: number;
+  requisitos_dinamicos?: DynamicFieldItem[];
 }
 
 interface Subcategory {
@@ -70,6 +73,7 @@ interface Subcategory {
   activo: boolean;
   orden?: number;
   categoria_nombre?: string;
+  requisitos_dinamicos?: DynamicFieldItem[];
 }
 
 interface ProductVariant {
@@ -86,6 +90,7 @@ interface ProductVariant {
   precio_fijo_ves?: number | null;
   precio_ref_mxn?: number | null;
   precio_fijo_mxn?: number | null;
+  requisitos_dinamicos?: DynamicFieldItem[];
 }
 
 interface Product {
@@ -107,6 +112,7 @@ interface Product {
   precio_fijo_ves?: number | null;
   precio_ref_mxn?: number | null;
   precio_fijo_mxn?: number | null;
+  requisitos_dinamicos?: DynamicFieldItem[];
 }
 
 interface PriceOverride {
@@ -164,6 +170,7 @@ interface AdminOrder {
   metodo_pago_nombre?: string | null;
   comprobante_url?: string | null;
   referencia_pago?: string | null;
+  datos_dinamicos?: Record<string, string>;
 }
 
 interface PaymentFieldItem {
@@ -191,7 +198,6 @@ interface PaymentMethod {
   actualizado_en?: string;
 }
 
-
 interface VaultItem {
   id: string;
   producto_id: string;
@@ -208,12 +214,156 @@ interface VaultItem {
   creado_en: string;
 }
 
+/* ======================================================== */
+/* COMPONENTE DE CUADRÍCULA DE PRECIOS POR RANGO ORDENADA   */
+/* Jerarquía estricta: Grado 4 -> Grado Especial ⭐         */
+/* Excluye admin y diseñador de la fijación de precios      */
+/* ======================================================== */
+function RankPricingSection({
+  rankRules,
+  prices,
+  onChange,
+  basePricePlaceholder,
+  isDesigner = false,
+}: {
+  rankRules: RankRule[];
+  prices: Record<string, string>;
+  onChange: (rango: string, val: string) => void;
+  basePricePlaceholder?: string;
+  isDesigner?: boolean;
+}) {
+  const getRuleMargin = (rangoKey: string, fallbackPct: number) => {
+    const found = rankRules.find((r) => r.rango.toLowerCase() === rangoKey.toLowerCase());
+    return found ? found.porcentaje_ganancia : fallbackPct;
+  };
+
+  const clientRanks = [
+    { key: "cliente_4", label: "Grado 4", defaultPct: 20 },
+    { key: "cliente_3", label: "Grado 3", defaultPct: 15 },
+    { key: "cliente_2", label: "Grado 2", defaultPct: 10 },
+    { key: "cliente_1", label: "Grado 1", defaultPct: 7 },
+    { key: "cliente_especial", label: "Grado Especial ⭐", defaultPct: 0, isSpecial: true },
+  ];
+
+  const resellerRanks = [
+    { key: "revendedor_4", label: "Revendedor Grado 4", defaultPct: 12 },
+    { key: "revendedor_3", label: "Revendedor Grado 3", defaultPct: 9 },
+    { key: "revendedor_2", label: "Revendedor Grado 2", defaultPct: 6 },
+    { key: "revendedor_1", label: "Revendedor Grado 1", defaultPct: 4 },
+    { key: "revendedor_especial", label: "Revendedor Grado Especial ⭐", defaultPct: 0, isSpecial: true },
+  ];
+
+  return (
+    <div className="space-y-4 pt-1">
+      {isDesigner && (
+        <div className="p-2.5 rounded-xl bg-purple-950/40 border border-purple-500/30 text-purple-300 text-xs flex items-center gap-2">
+          <Lock className="w-4 h-4 text-purple-400 shrink-0" />
+          <span>🎨 <strong>Permisos de Diseñador:</strong> Solo tienes acceso a imágenes y banners. Los precios por rango están protegidos.</span>
+        </div>
+      )}
+
+      {/* BLOQUE 1: CLIENTES */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-mono font-bold text-cyan-300 uppercase tracking-wider flex items-center gap-1.5">
+            <Users className="w-3.5 h-3.5 text-cyan-400" /> 👤 Rangos de Clientes (Grado 4 &rarr; Grado Especial ⭐)
+          </span>
+          <span className="text-[10px] text-slate-400 font-mono">5 niveles</span>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+          {clientRanks.map((r) => {
+            const margin = getRuleMargin(r.key, r.defaultPct);
+            return (
+              <div
+                key={r.key}
+                className={`p-2.5 rounded-xl border space-y-1 transition ${
+                  r.isSpecial
+                    ? "bg-amber-950/30 border-amber-500/50 shadow-sm shadow-amber-950/40"
+                    : "bg-slate-900 border-slate-800"
+                }`}
+              >
+                <div className="flex items-center justify-between text-[10px] font-mono">
+                  <span className={`font-bold ${r.isSpecial ? "text-amber-300 font-black" : "text-cyan-300"}`}>
+                    {r.label}
+                  </span>
+                  <span className="text-slate-400">+{margin}%</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="text-xs text-slate-400 font-mono">$</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    disabled={isDesigner}
+                    value={prices[r.key] || ""}
+                    onChange={(e) => onChange(r.key, e.target.value)}
+                    placeholder={basePricePlaceholder || "0.00"}
+                    className="w-full px-2 py-1 rounded-lg bg-slate-950 border border-slate-700 text-xs text-white font-mono font-bold outline-none focus:border-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* BLOQUE 2: REVENDEDORES */}
+      <div className="space-y-2 pt-2 border-t border-slate-800/80">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-mono font-bold text-purple-300 uppercase tracking-wider flex items-center gap-1.5">
+            <ShieldCheck className="w-3.5 h-3.5 text-purple-400" /> 💼 Rangos de Revendedores (Grado 4 &rarr; Grado Especial ⭐)
+          </span>
+          <span className="text-[10px] text-slate-400 font-mono">5 niveles</span>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+          {resellerRanks.map((r) => {
+            const margin = getRuleMargin(r.key, r.defaultPct);
+            return (
+              <div
+                key={r.key}
+                className={`p-2.5 rounded-xl border space-y-1 transition ${
+                  r.isSpecial
+                    ? "bg-fuchsia-950/30 border-fuchsia-500/50 shadow-sm shadow-fuchsia-950/40"
+                    : "bg-slate-900 border-slate-800"
+                }`}
+              >
+                <div className="flex items-center justify-between text-[10px] font-mono">
+                  <span className={`font-bold ${r.isSpecial ? "text-fuchsia-300 font-black" : "text-purple-300"}`}>
+                    {r.label}
+                  </span>
+                  <span className="text-slate-400">+{margin}%</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="text-xs text-slate-400 font-mono">$</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    disabled={isDesigner}
+                    value={prices[r.key] || ""}
+                    onChange={(e) => onChange(r.key, e.target.value)}
+                    placeholder={basePricePlaceholder || "0.00"}
+                    className="w-full px-2 py-1 rounded-lg bg-slate-950 border border-slate-700 text-xs text-white font-mono font-bold outline-none focus:border-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminDashboardPage() {
   const [activeTab, setActiveTab] = useState<"pedidos" | "catalogo" | "pagos" | "finanzas" | "usuarios" | "tasas" | "boveda">("pedidos");
 
   // Control de Acceso Exclusivo para Administradores
   const [authChecking, setAuthChecking] = useState(true);
   const [isAuthorized, setIsAuthorized] = useState(false);
+
+  // Estados de Notificaciones Push Admin
+  const [pushSubscribed, setPushSubscribed] = useState(false);
+  const [subscribingPush, setSubscribingPush] = useState(false);
+  const [testingPush, setTestingPush] = useState(false);
 
   // Estados de Métodos de Pago Manuales
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
@@ -285,17 +435,7 @@ export default function AdminDashboardPage() {
     mxn: Array<{ nick: string; price: number; minAmount: string; maxAmount: string; paymentMethods?: string[]; isMerchant?: boolean; isPro?: boolean; payTimeLimit?: number }>;
   } | null>(null);
 
-  // Integración API Free Fire (Módulo Gaming)
-  const [freefireApiKey, setFreefireApiKey] = useState("");
-  const [freefireApiUrl, setFreefireApiUrl] = useState("http://siambhau69.eu.cc");
-  const [freefireDefaultRegion, setFreefireDefaultRegion] = useState("US");
-  const [savingFreefireConfig, setSavingFreefireConfig] = useState(false);
-  const [showFfKeyPlain, setShowFfKeyPlain] = useState(false);
-  const [testingFfUid, setTestingFfUid] = useState("2579249340");
-  const [testingFfRegion, setTestingFfRegion] = useState("BD");
-  const [testingFfLoading, setTestingFfLoading] = useState(false);
-  const [testingFfResult, setTestingFfResult] = useState<any>(null);
-  const [testingFfError, setTestingFfError] = useState<string | null>(null);
+
 
   // Simulación "Ver como..." (Módulo 6.1)
   const [viewAsRole, setViewAsRole] = useState("admin");
@@ -374,6 +514,7 @@ export default function AdminDashboardPage() {
     precio_base: string;
     costo_proveedor: string;
     imagen_url: string;
+    requisitos_dinamicos?: DynamicFieldItem[];
   }>>([]);
 
   // Configuración de Precios por Rango y Overrides
@@ -458,6 +599,19 @@ export default function AdminDashboardPage() {
   const [prodImageUrl, setProdImageUrl] = useState("");
   const [prodActive, setProdActive] = useState(true);
   const [prodSpecialOffer, setProdSpecialOffer] = useState(false);
+
+  // Estados de Campos Dinámicos Requeridos al Cliente por Nivel
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [catDynamicFields, setCatDynamicFields] = useState<DynamicFieldItem[]>([]);
+  const [unifiedCatFields, setUnifiedCatFields] = useState<DynamicFieldItem[]>([]);
+  const [unifiedSubcatFields, setUnifiedSubcatFields] = useState<DynamicFieldItem[]>([]);
+  const [unifiedProdFields, setUnifiedProdFields] = useState<DynamicFieldItem[]>([]);
+  const [editProdFields, setEditProdFields] = useState<DynamicFieldItem[]>([]);
+  const [editVarFields, setEditVarFields] = useState<DynamicFieldItem[]>([]);
+  const [addVarFields, setAddVarFields] = useState<DynamicFieldItem[]>([]);
+
+  // Rol Diseñador: Solo acceso para modificar imágenes (sin precios, sin eliminación, sin finanzas)
+  const isDesigner = (currentUser?.rango?.toLowerCase() === "disenador") || (viewAsRole === "disenador");
 
   const [actionLoading, setActionLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -557,8 +711,14 @@ export default function AdminDashboardPage() {
 
   const getWhatsAppNotifyLink = (order: AdminOrder) => {
     const rawPhone = order.usuario_whatsapp?.replace(/[^0-9]/g, "") || "";
+    const dynamicFieldsSummary = order.datos_dinamicos && typeof order.datos_dinamicos === "object"
+      ? Object.entries(order.datos_dinamicos).map(([k, v]) => `${k}: ${v}`).join("\n")
+      : (order.player_id ? `Player ID: ${order.player_id}` : "");
+
     const text = encodeURIComponent(
-      `¡Hola ${order.usuario_nombre}! 👋 Tu recarga de *${order.producto_nombre}* para el Player ID *${order.player_id || "N/A"}* ha sido marcada como *${order.item_estado}* en Soul Store. ¡Gracias por confiar en nosotros!`
+      `¡Hola ${order.usuario_nombre}! 👋 Tu orden de *${order.producto_nombre}* ha sido actualizada a *${order.item_estado}* en Soul Store. 🎉\n\n` +
+      `${dynamicFieldsSummary ? dynamicFieldsSummary + "\n\n" : ""}` +
+      `¡Muchas gracias por confiar en Soul Store!`
     );
     return `https://wa.me/${rawPhone}?text=${text}`;
   };
@@ -604,12 +764,7 @@ export default function AdminDashboardPage() {
           if (data.mxn.sin_verif !== undefined) setSinVerifMxn(Boolean(data.mxn.sin_verif));
         }
 
-        // Free Fire API
-        if (data.freefire) {
-          if (data.freefire.api_key !== undefined) setFreefireApiKey(data.freefire.api_key || "");
-          if (data.freefire.api_url) setFreefireApiUrl(data.freefire.api_url);
-          if (data.freefire.default_region) setFreefireDefaultRegion(data.freefire.default_region);
-        }
+
       }
     } catch (err) {
       console.error("Error al cargar tasas:", err);
@@ -821,59 +976,6 @@ export default function AdminDashboardPage() {
     }
   };
 
-  const handleSaveFreefireConfig = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    setSavingFreefireConfig(true);
-    try {
-      const res = await fetch("/api/admin/rates", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          freefire_api_key: freefireApiKey.trim(),
-          freefire_api_url: freefireApiUrl.trim(),
-          freefire_default_region: freefireDefaultRegion.trim().toUpperCase(),
-        }),
-      });
-      if (res.ok) {
-        showNotification("success", "Configuración de API Free Fire guardada exitosamente.");
-        fetchRates();
-      } else {
-        showNotification("error", "Error al guardar configuración de Free Fire.");
-      }
-    } catch {
-      showNotification("error", "Error de red al guardar configuración de Free Fire.");
-    } finally {
-      setSavingFreefireConfig(false);
-    }
-  };
-
-  const handleTestFreefire = async () => {
-    if (!testingFfUid.trim()) {
-      showNotification("error", "Ingresa un UID para probar la validación.");
-      return;
-    }
-    setTestingFfLoading(true);
-    setTestingFfResult(null);
-    setTestingFfError(null);
-    try {
-      const res = await fetch(
-        `/api/freefire/validate?uid=${encodeURIComponent(testingFfUid.trim())}`
-      );
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setTestingFfResult(data);
-        showNotification("success", `Jugador validado: ${data.player.nickname} (Nivel ${data.player.level || '?'})`);
-      } else {
-        setTestingFfError(data.error || "No se pudo validar el jugador.");
-        showNotification("error", data.error || "No se pudo validar el jugador.");
-      }
-    } catch {
-      setTestingFfError("Error de conexión al endpoint de validación.");
-      showNotification("error", "Error de conexión al endpoint de validación.");
-    } finally {
-      setTestingFfLoading(false);
-    }
-  };
 
   const fetchVaultItems = async () => {
     try {
@@ -1214,14 +1316,22 @@ export default function AdminDashboardPage() {
         const res = await fetch("/api/auth/me");
         if (res.ok) {
           const data = await res.json();
-          if (data?.user?.rango === "admin") {
+          const userRank = data?.user?.rango?.toLowerCase();
+          if (userRank === "admin" || userRank === "disenador") {
             setIsAuthorized(true);
+            setCurrentUser(data.user);
+            if (userRank === "disenador") {
+              setActiveTab("catalogo");
+              setViewAsRole("disenador");
+            }
             fetchCatalogData();
-            fetchUsers();
-            fetchOrders();
-            fetchRates();
-            fetchVaultItems();
-            fetchPaymentMethods();
+            if (userRank === "admin") {
+              fetchUsers();
+              fetchOrders();
+              fetchRates();
+              fetchVaultItems();
+              fetchPaymentMethods();
+            }
             return;
           }
         }
@@ -1239,6 +1349,70 @@ export default function AdminDashboardPage() {
   const showNotification = (type: "success" | "error", text: string) => {
     setStatusMessage({ type, text });
     setTimeout(() => setStatusMessage(null), 4000);
+  };
+
+  // Sincronizar y verificar estado de notificaciones push para el Administrador
+  useEffect(() => {
+    const checkPush = async () => {
+      if (typeof window !== "undefined" && "serviceWorker" in navigator && "PushManager" in window) {
+        try {
+          const reg = await navigator.serviceWorker.ready;
+          const sub = await reg.pushManager.getSubscription();
+          if (sub && Notification.permission === "granted") {
+            setPushSubscribed(true);
+            fetch("/api/notifications/subscribe", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ subscription: sub, isAdmin: true, userId: currentUser?.id }),
+            }).catch(console.warn);
+          }
+        } catch (e) {
+          console.warn("Error al verificar estado push en admin:", e);
+        }
+      }
+    };
+    checkPush();
+  }, [currentUser]);
+
+  const handleEnablePush = async () => {
+    try {
+      setSubscribingPush(true);
+      const res = await subscribeCurrentDevice(true, currentUser?.id);
+      if (res.success) {
+        setPushSubscribed(true);
+        showNotification("success", "🔔 ¡Notificaciones Push de Pedidos activadas con éxito en este dispositivo!");
+      } else {
+        showNotification("error", res.error || "No se pudo activar las notificaciones.");
+      }
+    } catch (err: any) {
+      showNotification("error", err.message || "Error al activar notificaciones.");
+    } finally {
+      setSubscribingPush(false);
+    }
+  };
+
+  const handleTestPush = async () => {
+    try {
+      setTestingPush(true);
+      const res = await fetch("/api/notifications/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: "🟢 Soul Store • Alerta de Prueba ✅",
+          body: "📦 ¡Prueba exitosa! Recibirás esta alerta cada vez que un cliente registre una compra.",
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.delivered) {
+        showNotification("success", data.message || "Notificación de prueba enviada con éxito.");
+      } else {
+        showNotification("error", data.message || "No se pudo entregar la alerta de prueba.");
+      }
+    } catch {
+      showNotification("error", "Error de red al probar notificación.");
+    } finally {
+      setTestingPush(false);
+    }
   };
 
   // Crear o actualizar categoría
@@ -1261,6 +1435,7 @@ export default function AdminDashboardPage() {
           nombre: catName.trim(),
           imagen_url: catImageUrl.trim() || null,
           activo: catActive,
+          requisitos_dinamicos: catDynamicFields,
         }),
       });
 
@@ -1273,6 +1448,7 @@ export default function AdminDashboardPage() {
         );
         setCatName("");
         setCatImageUrl("");
+        setCatDynamicFields([]);
         setEditingCategory(null);
         setShowCategoryModal(false);
         fetchCatalogData();
@@ -1559,11 +1735,11 @@ export default function AdminDashboardPage() {
 
       const payload = {
         categoria: unifiedMode === "new_cat"
-          ? { nombre: newCatName.trim(), imagen_url: newCatImage.trim() || null }
-          : { id: selectedCatId },
+          ? { nombre: newCatName.trim(), imagen_url: newCatImage.trim() || null, requisitos_dinamicos: unifiedCatFields }
+          : { id: selectedCatId, requisitos_dinamicos: unifiedCatFields.length > 0 ? unifiedCatFields : undefined },
         subcategoria: unifiedSubcatMode === "new_subcat"
-          ? { nombre: newSubcatName.trim(), imagen_url: newSubcatImage.trim() || null }
-          : selectedSubcatId ? { id: selectedSubcatId } : null,
+          ? { nombre: newSubcatName.trim(), imagen_url: newSubcatImage.trim() || null, requisitos_dinamicos: unifiedSubcatFields }
+          : selectedSubcatId ? { id: selectedSubcatId, requisitos_dinamicos: unifiedSubcatFields.length > 0 ? unifiedSubcatFields : undefined } : null,
         producto: {
           nombre: unifiedProdName.trim(),
           descripcion: unifiedProdDesc.trim() || null,
@@ -1577,6 +1753,7 @@ export default function AdminDashboardPage() {
           precio_fijo_ves: unifiedVesMode === "fixed" && unifiedFijoVes ? parseFloat(unifiedFijoVes) : null,
           precio_ref_mxn: unifiedMxnMode === "ref" && unifiedRefMxn ? parseFloat(unifiedRefMxn) : null,
           precio_fijo_mxn: unifiedMxnMode === "fixed" && unifiedFijoMxn ? parseFloat(unifiedFijoMxn) : null,
+          requisitos_dinamicos: unifiedProdFields,
         },
         overrides: unifiedRankPricingMode === "manual"
           ? Object.entries(unifiedRankPrices)
@@ -1588,6 +1765,7 @@ export default function AdminDashboardPage() {
           precio_base: parseFloat(sp.precio_base) || 0,
           costo_proveedor: parseFloat(sp.costo_proveedor) || 0,
           imagen_url: sp.imagen_url.trim() || null,
+          requisitos_dinamicos: sp.requisitos_dinamicos || [],
         })),
       };
 
@@ -1604,14 +1782,17 @@ export default function AdminDashboardPage() {
         setNewCatName("");
         setNewCatImage("");
         setUnifiedMode("existing_cat");
+        setUnifiedCatFields([]);
         setNewSubcatName("");
         setNewSubcatImage("");
         setUnifiedSubcatMode("existing_subcat");
+        setUnifiedSubcatFields([]);
         setUnifiedProdName("");
         setUnifiedProdDesc("");
         setUnifiedProdPrice("");
         setUnifiedProdCost("");
         setUnifiedProdImage("");
+        setUnifiedProdFields([]);
         setUnifiedProdSpecial(false);
         setUnifiedSpecialImageType("default");
         setUnifiedSpecialImage("");
@@ -1698,6 +1879,7 @@ export default function AdminDashboardPage() {
     }
 
     setShowEditProductModal(true);
+    setEditProdFields(prod.requisitos_dinamicos || []);
   };
 
   const handleSaveEditProduct = async (e: React.FormEvent) => {
@@ -1723,17 +1905,18 @@ export default function AdminDashboardPage() {
           nombre: editProdName.trim(),
           descripcion: editProdDesc.trim() || null,
           subcategoria_id: editSubcatId || undefined,
-          precio_base: parseFloat(editProdPrice) || 0,
-          costo_proveedor: parseFloat(editProdCost) || 0,
+          precio_base: isDesigner ? editingProduct.precio_base : (parseFloat(editProdPrice) || 0),
+          costo_proveedor: isDesigner ? editingProduct.costo_proveedor : (parseFloat(editProdCost) || 0),
           activo: editProdActive,
           oferta_especial: editProdSpecial,
           imagen_url: editProdImage.trim() || null,
           imagen_oferta_url: promoImageVal,
-          precio_ref_ves: editVesMode === "ref" && editRefVes ? parseFloat(editRefVes) : null,
-          precio_fijo_ves: editVesMode === "fixed" && editFijoVes ? parseFloat(editFijoVes) : null,
-          precio_ref_mxn: editMxnMode === "ref" && editRefMxn ? parseFloat(editRefMxn) : null,
-          precio_fijo_mxn: editMxnMode === "fixed" && editFijoMxn ? parseFloat(editFijoMxn) : null,
-          overrides: overrideList,
+          precio_ref_ves: isDesigner ? editingProduct.precio_ref_ves : (editVesMode === "ref" && editRefVes ? parseFloat(editRefVes) : null),
+          precio_fijo_ves: isDesigner ? editingProduct.precio_fijo_ves : (editVesMode === "fixed" && editFijoVes ? parseFloat(editFijoVes) : null),
+          precio_ref_mxn: isDesigner ? editingProduct.precio_ref_mxn : (editMxnMode === "ref" && editRefMxn ? parseFloat(editRefMxn) : null),
+          precio_fijo_mxn: isDesigner ? editingProduct.precio_fijo_mxn : (editMxnMode === "fixed" && editFijoMxn ? parseFloat(editFijoMxn) : null),
+          overrides: isDesigner ? undefined : overrideList,
+          requisitos_dinamicos: isDesigner ? undefined : editProdFields,
         }),
       });
 
@@ -1741,6 +1924,7 @@ export default function AdminDashboardPage() {
         showNotification("success", `Producto "${editProdName}" actualizado correctamente.`);
         setShowEditProductModal(false);
         setEditingProduct(null);
+        setEditProdFields([]);
         fetchCatalogData();
       } else {
         const err = await res.json();
@@ -1807,6 +1991,7 @@ export default function AdminDashboardPage() {
     }
 
     setShowEditVariantModal(true);
+    setEditVarFields(variant.requisitos_dinamicos || []);
   };
 
   const handleSaveEditVariant = async (e: React.FormEvent) => {
@@ -1826,15 +2011,16 @@ export default function AdminDashboardPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           nombre: editVarName.trim(),
-          precio_base: parseFloat(editVarPrice) || 0,
-          costo_proveedor: parseFloat(editVarCost) || 0,
+          precio_base: isDesigner ? editingVariant.precio_base : (parseFloat(editVarPrice) || 0),
+          costo_proveedor: isDesigner ? editingVariant.costo_proveedor : (parseFloat(editVarCost) || 0),
           imagen_url: editVarImage.trim() || null,
           activo: editVarActive,
-          precio_ref_ves: editVarVesMode === "ref" && editVarRefVes ? parseFloat(editVarRefVes) : null,
-          precio_fijo_ves: editVarVesMode === "fixed" && editVarFijoVes ? parseFloat(editVarFijoVes) : null,
-          precio_ref_mxn: editVarMxnMode === "ref" && editVarRefMxn ? parseFloat(editVarRefMxn) : null,
-          precio_fijo_mxn: editVarMxnMode === "fixed" && editVarFijoMxn ? parseFloat(editVarFijoMxn) : null,
-          overrides: overrideList,
+          precio_ref_ves: isDesigner ? editingVariant.precio_ref_ves : (editVarVesMode === "ref" && editVarRefVes ? parseFloat(editVarRefVes) : null),
+          precio_fijo_ves: isDesigner ? editingVariant.precio_fijo_ves : (editVarVesMode === "fixed" && editVarFijoVes ? parseFloat(editVarFijoVes) : null),
+          precio_ref_mxn: isDesigner ? editingVariant.precio_ref_mxn : (editVarMxnMode === "ref" && editVarRefMxn ? parseFloat(editVarRefMxn) : null),
+          precio_fijo_mxn: isDesigner ? editingVariant.precio_fijo_mxn : (editVarMxnMode === "fixed" && editVarFijoMxn ? parseFloat(editVarFijoMxn) : null),
+          overrides: isDesigner ? undefined : overrideList,
+          requisitos_dinamicos: isDesigner ? undefined : editVarFields,
         }),
       });
 
@@ -1842,6 +2028,7 @@ export default function AdminDashboardPage() {
         showNotification("success", `Subproducto "${editVarName}" actualizado.`);
         setShowEditVariantModal(false);
         setEditingVariant(null);
+        setEditVarFields([]);
         fetchCatalogData();
       } else {
         const err = await res.json();
@@ -1871,6 +2058,7 @@ export default function AdminDashboardPage() {
           costo_proveedor: parseFloat(varCost) || targetProductForVariant.costo_proveedor,
           imagen_url: varImage.trim() || targetProductForVariant.imagen_url || null,
           activo: true,
+          requisitos_dinamicos: addVarFields,
         }),
       });
 
@@ -1882,6 +2070,7 @@ export default function AdminDashboardPage() {
         setVarPrice("");
         setVarCost("");
         setVarImage("");
+        setAddVarFields([]);
         fetchCatalogData();
       } else {
         showNotification("error", "Error al crear subproducto.");
@@ -1967,52 +2156,125 @@ export default function AdminDashboardPage() {
               <span className="text-slate-400">Simular Rol:</span>
               <select 
                 value={viewAsRole}
-                onChange={(e) => setViewAsRole(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setViewAsRole(val);
+                  if (val === "disenador") {
+                    setActiveTab("catalogo");
+                  }
+                }}
                 className="bg-transparent text-white font-mono font-semibold outline-none cursor-pointer"
               >
-                <option value="admin" className="bg-slate-900">Admin (Control Total)</option>
-                <option value="disenador" className="bg-slate-900">Diseñador Gráfico</option>
-                <option value="revendedor_1" className="bg-slate-900">Revendedor Grado 1</option>
-                <option value="cliente_especial" className="bg-slate-900">Cliente Especial</option>
-                <option value="cliente_4" className="bg-slate-900">Cliente Grado 4 (General)</option>
+                <option value="admin" className="bg-slate-900">👑 Admin (Control Total)</option>
+                <option value="disenador" className="bg-slate-900">🎨 Diseñador (Solo Imágenes)</option>
+                <option value="revendedor_especial" className="bg-slate-900">💼 Revendedor Grado Especial ⭐</option>
+                <option value="revendedor_1" className="bg-slate-900">💼 Revendedor Grado 1</option>
+                <option value="revendedor_2" className="bg-slate-900">💼 Revendedor Grado 2</option>
+                <option value="revendedor_3" className="bg-slate-900">💼 Revendedor Grado 3</option>
+                <option value="revendedor_4" className="bg-slate-900">💼 Revendedor Grado 4</option>
+                <option value="cliente_especial" className="bg-slate-900">👤 Cliente Grado Especial ⭐</option>
+                <option value="cliente_1" className="bg-slate-900">👤 Cliente Grado 1</option>
+                <option value="cliente_2" className="bg-slate-900">👤 Cliente Grado 2</option>
+                <option value="cliente_3" className="bg-slate-900">👤 Cliente Grado 3</option>
+                <option value="cliente_4" className="bg-slate-900">👤 Cliente Grado 4 (General)</option>
               </select>
             </div>
           </div>
 
-          <div className="flex items-center gap-4 text-sm">
+          <div className="flex items-center gap-2 sm:gap-3 text-sm">
+            {/* Control de Notificaciones Push de Pedidos */}
+            <div className="flex items-center gap-1.5">
+              {pushSubscribed ? (
+                <div className="flex items-center gap-1.5">
+                  <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-bold">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span>Alertas Push Activas</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleTestPush}
+                    disabled={testingPush}
+                    className="px-2.5 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-200 text-xs font-mono font-bold transition flex items-center gap-1"
+                    title="Enviar notificación de prueba a este dispositivo"
+                  >
+                    {testingPush ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <span>🧪 Probar Alerta</span>}
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleEnablePush}
+                  disabled={subscribingPush}
+                  className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-[#FFF01F] to-amber-400 hover:from-yellow-300 hover:to-amber-300 text-slate-950 text-xs font-black transition flex items-center gap-1.5 shadow-[0_0_15px_rgba(255,240,31,0.35)]"
+                  title="Activa las alertas para recibir notificaciones cuando entre un pedido"
+                >
+                  {subscribingPush ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Activando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>🔔</span>
+                      <span className="hidden sm:inline">Activar Alertas de Pedidos</span>
+                      <span className="sm:hidden">Alertas</span>
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
+
             <Link 
               href="/" 
               className="text-xs text-slate-300 hover:text-white transition flex items-center gap-1.5 px-3 py-1.5 rounded-lg glass-panel hover:border-slate-600"
             >
-              <span>Ver Tienda Pública</span>
+              <span className="hidden sm:inline">Ver Tienda Pública</span>
+              <span className="sm:hidden">Tienda</span>
               <ExternalLink className="w-3.5 h-3.5 text-fuchsia-400" />
             </Link>
             <div className="w-8 h-8 rounded-full bg-gradient-to-r from-fuchsia-500 to-pink-500 flex items-center justify-center text-xs font-bold text-white shadow-glow">
-              AD
+              {isDesigner ? "DS" : "AD"}
             </div>
           </div>
         </div>
       </header>
 
+      {/* Banner de Modo Diseñador */}
+      {isDesigner && (
+        <div className="bg-gradient-to-r from-purple-950 via-fuchsia-950 to-slate-950 border-b border-purple-500/40 p-2.5 px-4 text-xs font-medium text-purple-200">
+          <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-purple-300 shrink-0" />
+              <span>🎨 <strong>Modo Diseñador Gráfico:</strong> Tienes acceso exclusivo para actualizar imágenes y banners de productos. Las finanzas, configuración de precios y eliminaciones están restringidas.</span>
+            </div>
+            <span className="text-[10px] font-mono bg-purple-900/60 text-purple-300 px-2.5 py-0.5 rounded-full border border-purple-500/30 font-bold shrink-0">
+              Solo Modificación de Imágenes
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Tabs navigation */}
       <div className="bg-black/40 border-b border-slate-800/80 px-4">
         <div className="max-w-7xl mx-auto flex items-center gap-2 overflow-x-auto py-2">
-          <button
-            onClick={() => setActiveTab("pedidos")}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
-              activeTab === "pedidos"
-                ? "bg-fuchsia-600 text-white shadow-glow"
-                : "text-slate-400 hover:text-white glass-panel"
-            }`}
-          >
-            <ShoppingBag className="w-4 h-4" />
-            <span>Gestión de Pedidos & Despachos</span>
-            {orders.filter((o) => o.item_estado === "EN_COLA").length > 0 && (
-              <span className="px-1.5 py-0.2 rounded-full bg-pink-500 text-white font-mono text-[10px] animate-pulse">
-                {orders.filter((o) => o.item_estado === "EN_COLA").length}
-              </span>
-            )}
-          </button>
+          {!isDesigner && (
+            <button
+              onClick={() => setActiveTab("pedidos")}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
+                activeTab === "pedidos"
+                  ? "bg-fuchsia-600 text-white shadow-glow"
+                  : "text-slate-400 hover:text-white glass-panel"
+              }`}
+            >
+              <ShoppingBag className="w-4 h-4" />
+              <span>Gestión de Pedidos & Despachos</span>
+              {orders.filter((o) => o.item_estado === "EN_COLA").length > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full bg-pink-500 text-white font-mono text-[10px] animate-pulse">
+                  {orders.filter((o) => o.item_estado === "EN_COLA").length}
+                </span>
+              )}
+            </button>
+          )}
 
           <button
             onClick={() => setActiveTab("catalogo")}
@@ -2026,76 +2288,80 @@ export default function AdminDashboardPage() {
             <span>Gestor de Catálogo Dinámico</span>
           </button>
 
-          <button
-            onClick={() => setActiveTab("finanzas")}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
-              activeTab === "finanzas"
-                ? "bg-fuchsia-600 text-white shadow-glow"
-                : "text-slate-400 hover:text-white glass-panel"
-            }`}
-          >
-            <BarChart3 className="w-4 h-4" />
-            <span>Dashboard Financiero</span>
-          </button>
+          {!isDesigner && (
+            <>
+              <button
+                onClick={() => setActiveTab("finanzas")}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
+                  activeTab === "finanzas"
+                    ? "bg-fuchsia-600 text-white shadow-glow"
+                    : "text-slate-400 hover:text-white glass-panel"
+                }`}
+              >
+                <BarChart3 className="w-4 h-4" />
+                <span>Dashboard Financiero</span>
+              </button>
 
-          <button
-            onClick={() => setActiveTab("usuarios")}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
-              activeTab === "usuarios"
-                ? "bg-fuchsia-600 text-white shadow-glow"
-                : "text-slate-400 hover:text-white glass-panel"
-            }`}
-          >
-            <Users className="w-4 h-4" />
-            <span>Gestor de Usuarios</span>
-          </button>
+              <button
+                onClick={() => setActiveTab("usuarios")}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
+                  activeTab === "usuarios"
+                    ? "bg-fuchsia-600 text-white shadow-glow"
+                    : "text-slate-400 hover:text-white glass-panel"
+                }`}
+              >
+                <Users className="w-4 h-4" />
+                <span>Gestor de Usuarios</span>
+              </button>
 
-          <button
-            onClick={() => setActiveTab("tasas")}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
-              activeTab === "tasas"
-                ? "bg-fuchsia-600 text-white shadow-glow"
-                : "text-slate-400 hover:text-white glass-panel"
-            }`}
-          >
-            <DollarSign className="w-4 h-4" />
-            <span>Multidivisa & Suiche P2P</span>
-          </button>
+              <button
+                onClick={() => setActiveTab("tasas")}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
+                  activeTab === "tasas"
+                    ? "bg-fuchsia-600 text-white shadow-glow"
+                    : "text-slate-400 hover:text-white glass-panel"
+                }`}
+              >
+                <DollarSign className="w-4 h-4" />
+                <span>Multidivisa & Suiche P2P</span>
+              </button>
 
-          <button
-            onClick={() => setActiveTab("pagos")}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
-              activeTab === "pagos"
-                ? "bg-fuchsia-600 text-white shadow-glow"
-                : "text-slate-400 hover:text-white glass-panel"
-            }`}
-          >
-            <CreditCard className="w-4 h-4 text-[#FFF01F]" />
-            <span>Métodos de Pago</span>
-            {paymentMethods.length > 0 && (
-              <span className="px-1.5 py-0.2 rounded-full bg-slate-800 text-[#FFF01F] text-[10px] font-mono border border-white/10">
-                {paymentMethods.filter(p => p.activo).length}
-              </span>
-            )}
-          </button>
+              <button
+                onClick={() => setActiveTab("pagos")}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
+                  activeTab === "pagos"
+                    ? "bg-fuchsia-600 text-white shadow-glow"
+                    : "text-slate-400 hover:text-white glass-panel"
+                }`}
+              >
+                <CreditCard className="w-4 h-4 text-[#FFF01F]" />
+                <span>Métodos de Pago</span>
+                {paymentMethods.length > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full bg-slate-800 text-[#FFF01F] text-[10px] font-mono border border-white/10">
+                    {paymentMethods.filter(p => p.activo).length}
+                  </span>
+                )}
+              </button>
 
-          <button
-            onClick={() => setActiveTab("boveda")}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
-              activeTab === "boveda"
-                ? "bg-fuchsia-600 text-white shadow-glow"
-                : "text-slate-400 hover:text-white glass-panel"
-            }`}
-          >
-            <ShieldCheck className="w-4 h-4 text-emerald-400" />
-            <span>Bóveda Segura</span>
-            {vaultItems.filter(i => i.estado === "OFERTA_ESPECIAL").length > 0 && (
-              <span className="px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] flex items-center gap-0.5">
-                <Flame className="w-2.5 h-2.5" />
-                {vaultItems.filter(i => i.estado === "OFERTA_ESPECIAL").length}
-              </span>
-            )}
-          </button>
+              <button
+                onClick={() => setActiveTab("boveda")}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
+                  activeTab === "boveda"
+                    ? "bg-fuchsia-600 text-white shadow-glow"
+                    : "text-slate-400 hover:text-white glass-panel"
+                }`}
+              >
+                <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                <span>Bóveda Segura</span>
+                {vaultItems.filter(i => i.estado === "OFERTA_ESPECIAL").length > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] flex items-center gap-0.5">
+                    <Flame className="w-2.5 h-2.5" />
+                    {vaultItems.filter(i => i.estado === "OFERTA_ESPECIAL").length}
+                  </span>
+                )}
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -2195,11 +2461,44 @@ export default function AdminDashboardPage() {
                           </td>
                           <td className="py-3.5 px-4">
                             <span className="font-bold text-white block">{o.producto_nombre}</span>
-                            {o.player_id && (
-                              <span className="text-[11px] font-mono text-fuchsia-400 block">
-                                ID: {o.player_id} ({o.region || "Global"})
-                              </span>
-                            )}
+                            {o.datos_dinamicos && typeof o.datos_dinamicos === "object" && Object.keys(o.datos_dinamicos).length > 0 ? (
+                              <div className="mt-1 space-y-1">
+                                {Object.entries(o.datos_dinamicos).map(([campo, valor]) => (
+                                  <div key={campo} className="flex items-center gap-1.5 text-[11px] font-mono bg-slate-950/70 p-1 px-1.5 rounded-lg border border-slate-800">
+                                    <span className="text-slate-400 font-semibold">{campo}:</span>
+                                    <span className="text-fuchsia-300 font-bold truncate max-w-[140px]">{String(valor)}</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => copyToClipboard(String(valor), `${o.item_id}_${campo}`)}
+                                      className="text-slate-500 hover:text-white p-0.5 ml-auto"
+                                      title={`Copiar ${campo}`}
+                                    >
+                                      {copiedId === `${o.item_id}_${campo}` ? (
+                                        <Check className="w-3 h-3 text-emerald-400" />
+                                      ) : (
+                                        <Copy className="w-3 h-3" />
+                                      )}
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : o.player_id ? (
+                              <div className="flex items-center gap-1.5 text-[11px] font-mono text-fuchsia-400 mt-0.5">
+                                <span>ID: {o.player_id} ({o.region || "Global"})</span>
+                                <button
+                                  type="button"
+                                  onClick={() => copyToClipboard(o.player_id!, `${o.item_id}_pid`)}
+                                  className="text-slate-500 hover:text-white p-0.5"
+                                  title="Copiar Player ID"
+                                >
+                                  {copiedId === `${o.item_id}_pid` ? (
+                                    <Check className="w-3 h-3 text-emerald-400" />
+                                  ) : (
+                                    <Copy className="w-3 h-3" />
+                                  )}
+                                </button>
+                              </div>
+                            ) : null}
                           </td>
                           <td className="py-3.5 px-4 font-mono">
                             <span className="font-bold text-white block truncate max-w-[170px]">
@@ -2313,6 +2612,7 @@ export default function AdminDashboardPage() {
                     setCatActive(true);
                     setCatName("");
                     setCatImageUrl("");
+                    setCatDynamicFields([]);
                     setShowCategoryModal(true);
                   }}
                   className="px-3.5 py-3 rounded-2xl glass-panel hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 text-xs font-bold flex items-center gap-1.5 transition"
@@ -2538,6 +2838,7 @@ export default function AdminDashboardPage() {
                                 setCatName(cat.nombre);
                                 setCatImageUrl(cat.imagen_url || "");
                                 setCatActive(cat.activo);
+                                setCatDynamicFields(cat.requisitos_dinamicos || []);
                                 setShowCategoryModal(true);
                               }}
                               title="Editar categoría e imagen"
@@ -2545,13 +2846,15 @@ export default function AdminDashboardPage() {
                             >
                               <Pencil className="w-4 h-4" />
                             </button>
-                            <button
-                              onClick={() => handleDeleteCategory(cat)}
-                              title="Eliminar categoría"
-                              className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-950/40 transition"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            {!isDesigner && (
+                              <button
+                                onClick={() => handleDeleteCategory(cat)}
+                                title="Eliminar categoría"
+                                className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-950/40 transition"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
                           </div>
                         </div>
 
@@ -2572,13 +2875,15 @@ export default function AdminDashboardPage() {
                                     <img src={sub.imagen_url} alt={sub.nombre} className="w-3.5 h-3.5 rounded object-cover" />
                                   )}
                                   <span>{sub.nombre}</span>
-                                  <button
-                                    onClick={() => handleDeleteSubcategory(sub)}
-                                    className="text-slate-500 hover:text-red-400 ml-1"
-                                    title="Eliminar subcategoría"
-                                  >
-                                    <X className="w-3 h-3" />
-                                  </button>
+                                  {!isDesigner && (
+                                    <button
+                                      onClick={() => handleDeleteSubcategory(sub)}
+                                      className="text-slate-500 hover:text-red-400 ml-1"
+                                      title="Eliminar subcategoría"
+                                    >
+                                      <X className="w-3 h-3" />
+                                    </button>
+                                  )}
                                 </div>
                               ))}
                             </div>
@@ -2722,14 +3027,16 @@ export default function AdminDashboardPage() {
                                   <Pencil className="w-3.5 h-3.5" />
                                   <span>Editar</span>
                                 </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteProduct(prod)}
-                                  title="Eliminar producto"
-                                  className="p-1.5 rounded-xl text-slate-500 hover:text-red-400 hover:bg-red-950/40 transition shrink-0"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
+                                {!isDesigner && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteProduct(prod)}
+                                    title="Eliminar producto"
+                                    className="p-1.5 rounded-xl text-slate-500 hover:text-red-400 hover:bg-red-950/40 transition shrink-0"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                )}
                               </div>
                             </div>
 
@@ -2864,14 +3171,16 @@ export default function AdminDashboardPage() {
                                         >
                                           <Pencil className="w-3.5 h-3.5" />
                                         </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => handleDeleteVariant(v.id, v.nombre)}
-                                          className="text-slate-500 hover:text-red-400 p-1 rounded-lg hover:bg-red-950/30 transition"
-                                          title="Eliminar subproducto"
-                                        >
-                                          <Trash2 className="w-3.5 h-3.5" />
-                                        </button>
+                                        {!isDesigner && (
+                                          <button
+                                            type="button"
+                                            onClick={() => handleDeleteVariant(v.id, v.nombre)}
+                                            className="text-slate-500 hover:text-red-400 p-1 rounded-lg hover:bg-red-950/30 transition"
+                                            title="Eliminar subproducto"
+                                          >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                          </button>
+                                        )}
                                       </div>
                                     </div>
                                   ))}
@@ -3876,269 +4185,7 @@ export default function AdminDashboardPage() {
               </div>
             )}
 
-            {/* Box 4: Integración API Free Fire (Validación Oficial de IDs para Gaming) */}
-            <div className="glass-panel p-6 rounded-2xl border border-amber-500/20 space-y-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 shadow-glow">
-                    <Gamepad2 className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-bold text-white text-base">API Free Fire (Validación de Jugadores)</h3>
-                      <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30">
-                        Exclusivo Gaming &gt; Free Fire
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-400">
-                      Valida automáticamente el UID, nickname oficial y nivel de la cuenta antes de procesar recargas de diamantes o pases.
-                    </p>
-                  </div>
-                </div>
 
-                <button
-                  type="button"
-                  onClick={() => handleSaveFreefireConfig()}
-                  disabled={savingFreefireConfig}
-                  className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white text-xs font-bold transition disabled:opacity-50 shadow-glow self-start sm:self-auto"
-                >
-                  {savingFreefireConfig ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                  <span>Guardar Configuración Free Fire</span>
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Formulario de Configuración */}
-                <div className="space-y-4 p-5 rounded-2xl bg-slate-900/60 border border-slate-800">
-                  <h4 className="text-xs font-mono font-bold text-amber-400 uppercase tracking-wider flex items-center gap-2">
-                    <Key className="w-4 h-4" />
-                    <span>Credenciales del Proveedor API</span>
-                  </h4>
-
-                  {/* API Key */}
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-mono text-slate-300 block font-bold">
-                      API Key Secreta
-                    </label>
-                    <div className="relative">
-                      <input
-                        type={showFfKeyPlain ? "text" : "password"}
-                        value={freefireApiKey}
-                        onChange={(e) => setFreefireApiKey(e.target.value)}
-                        placeholder="Pega aquí tu API Key (ej. YOUR_KEY)"
-                        className="w-full pl-3 pr-10 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white font-mono text-xs focus:border-amber-500 outline-none"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowFfKeyPlain(!showFfKeyPlain)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition"
-                        title={showFfKeyPlain ? "Ocultar clave" : "Mostrar clave"}
-                      >
-                        {showFfKeyPlain ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    </div>
-                    <div className="flex items-center justify-between pt-1">
-                      <p className="text-[11px] text-slate-400">
-                        Esta clave se mantiene segura en el servidor y nunca se expone a los clientes.
-                      </p>
-                      <a
-                        href="https://telegram.me/SiamBhau?text=https%3A%2F%2Fsiambhau69.eu.cc%0A%0AHi%20%40SiamBhau%20%F0%9F%91%8B%2C%20I'd%20like%20to%20get%20a%20FREE%20API%20key%20for%20the%20Free%20Fire%20Info%20endpoints.%20Could%20you%20please%20activate%20one%20for%20me%3F%20%F0%9F%99%8F"
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1 text-[11px] font-mono text-cyan-400 hover:text-cyan-300 hover:underline"
-                      >
-                        <span>Pedir clave gratis en Telegram (@SiamBhau)</span>
-                        <ExternalLink className="w-3 h-3" />
-                      </a>
-                    </div>
-                  </div>
-
-                  {/* URL Base */}
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-mono text-slate-300 block font-bold">
-                      URL Base de la API
-                    </label>
-                    <input
-                      type="text"
-                      value={freefireApiUrl}
-                      onChange={(e) => setFreefireApiUrl(e.target.value)}
-                      placeholder="http://siambhau69.eu.cc"
-                      className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white font-mono text-xs focus:border-amber-500 outline-none"
-                    />
-                    <p className="text-[11px] text-slate-400">
-                      Servidor proxy REST para endpoints <code className="text-amber-400">/freefireinfo/bhau</code> y <code className="text-amber-400">/freefireinfo/stats</code>.
-                    </p>
-                  </div>
-
-                  {/* Región Predeterminada */}
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-mono text-slate-300 block font-bold">
-                      Región de Servidor por Defecto
-                    </label>
-                    <select
-                      value={freefireDefaultRegion}
-                      onChange={(e) => setFreefireDefaultRegion(e.target.value)}
-                      className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white font-mono text-xs font-bold focus:border-amber-500 outline-none"
-                    >
-                      <option value="US">US - EE.UU. / LATAM (Norte &amp; Sur)</option>
-                      <option value="SAC">SAC - Sudamérica</option>
-                      <option value="BR">BR - Brasil</option>
-                      <option value="BD">BD - Bangladesh</option>
-                      <option value="IND">IND - India</option>
-                      <option value="SG">SG - Singapur</option>
-                      <option value="EU">EU - Europa</option>
-                      <option value="ME">ME - Medio Oriente</option>
-                      <option value="RU">RU - Rusia</option>
-                      <option value="ID">ID - Indonesia</option>
-                      <option value="TH">TH - Tailandia</option>
-                      <option value="VN">VN - Vietnam</option>
-                    </select>
-                    <p className="text-[11px] text-slate-400">
-                      Región inicial de búsqueda. El sistema auto-detecta la región exacta de la cuenta recorriendo los servidores oficiales.
-                    </p>
-                  </div>
-
-                  <div className="pt-2">
-                    <button
-                      type="button"
-                      onClick={() => handleSaveFreefireConfig()}
-                      disabled={savingFreefireConfig}
-                      className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/30 text-xs font-bold transition disabled:opacity-50"
-                    >
-                      {savingFreefireConfig ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                      <span>Guardar Parámetros de Free Fire</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Probador en Vivo de UID */}
-                <div className="space-y-4 p-5 rounded-2xl bg-slate-900/60 border border-slate-800 flex flex-col justify-between">
-                  <div className="space-y-3">
-                    <h4 className="text-xs font-mono font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-2">
-                      <Sparkles className="w-4 h-4" />
-                      <span>Probador de Validación en Vivo</span>
-                    </h4>
-                    <p className="text-xs text-slate-400">
-                      Ingresa cualquier UID y región para probar la conexión directa con el endpoint <code className="text-cyan-400">/freefireinfo/bhau</code>.
-                    </p>
-
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-mono text-slate-300 block font-bold">UID del Jugador (Detecta la región automáticamente)</label>
-                      <input
-                        type="text"
-                        value={testingFfUid}
-                        onChange={(e) => setTestingFfUid(e.target.value)}
-                        placeholder="Ej: 816331100 o 2579249340"
-                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white font-mono text-xs focus:border-cyan-500 outline-none"
-                      />
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={handleTestFreefire}
-                      disabled={testingFfLoading}
-                      className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white text-xs font-bold transition disabled:opacity-50 shadow-glow"
-                    >
-                      {testingFfLoading ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          <span>Consultando Servidor Free Fire...</span>
-                        </>
-                      ) : (
-                        <>
-                          <CheckCircle2 className="w-4 h-4" />
-                          <span>Probar Validación de Jugador</span>
-                        </>
-                      )}
-                    </button>
-
-                    {/* Resultado de la Prueba */}
-                    {testingFfResult && (
-                      <div className="p-3.5 rounded-xl bg-emerald-950/40 border border-emerald-500/40 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                            <span className="text-xs font-bold text-white">Jugador Encontrado</span>
-                          </div>
-                          <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                            Región: {testingFfResult.player?.region || testingFfRegion}
-                          </span>
-                        </div>
-
-                        {/* Foto + Nickname + Likes + Nivel */}
-                        <div className="flex items-center gap-3">
-                          <div className="relative shrink-0">
-                            <div className="w-14 h-14 rounded-xl overflow-hidden border-2 border-emerald-400 bg-slate-950 flex items-center justify-center shadow">
-                              <img
-                                src={testingFfResult.player?.avatarUrl || `/api/freefire/avatar?uid=${encodeURIComponent(testingFfResult.player?.uid || testingFfUid)}&region=${encodeURIComponent(testingFfResult.player?.region || testingFfRegion)}&name=${encodeURIComponent(testingFfResult.player?.nickname || 'FF')}`}
-                                alt={testingFfResult.player?.nickname}
-                                className="w-full h-full object-cover"
-                                onError={(e) => {
-                                  e.currentTarget.src = `/api/freefire/avatar?name=${encodeURIComponent(testingFfResult.player?.nickname || 'FF')}`;
-                                }}
-                              />
-                            </div>
-                            <div className="absolute -bottom-1 -right-1 px-1.5 py-0.2 rounded bg-[#FFF01F] text-black font-black text-[9px] font-mono">
-                              Nv.{testingFfResult.player?.level || 1}
-                            </div>
-                          </div>
-
-                          <div className="min-w-0 flex-1 space-y-1">
-                            <div className="flex items-center gap-1.5">
-                              <h5 className="font-mono font-bold text-white text-sm truncate">
-                                {testingFfResult.player?.nickname || "Desconocido"}
-                              </h5>
-                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                            </div>
-
-                            <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-mono">
-                              <span className="px-1.5 py-0.5 rounded bg-slate-950 text-cyan-300 font-bold border border-slate-800">
-                                ⭐ Nv. {testingFfResult.player?.level || "N/A"}
-                              </span>
-                              <span className="px-1.5 py-0.5 rounded bg-pink-500/20 text-pink-300 font-bold border border-pink-500/30">
-                                ❤️ {Number(testingFfResult.player?.likes || 0).toLocaleString()} Me gusta
-                              </span>
-                              {testingFfResult.player?.clanName && (
-                                <span className="px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 font-bold border border-purple-500/30">
-                                  🛡️ {testingFfResult.player.clanName}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {testingFfError && (
-                      <div className="p-3 rounded-xl bg-red-950/40 border border-red-500/40 flex items-start gap-2">
-                        <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
-                        <div className="text-xs text-red-300">
-                          <span className="font-bold block">Error al validar UID:</span>
-                          <span className="text-[11px] opacity-90">{testingFfError}</span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Documentación de Endpoints del Proveedor */}
-                  <div className="pt-3 border-t border-slate-800 space-y-1.5">
-                    <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block font-bold">
-                      Endpoints Soportados por el Sistema:
-                    </span>
-                    <div className="space-y-1 font-mono text-[10px] text-slate-400">
-                      <div className="p-1.5 rounded bg-slate-950/80 border border-slate-800/80 flex items-center justify-between">
-                        <span className="text-emerald-400 font-bold">GET /freefireinfo/bhau</span>
-                        <span className="text-slate-400">Perfil Completo</span>
-                      </div>
-                      <div className="p-1.5 rounded bg-slate-950/80 border border-slate-800/80 flex items-center justify-between">
-                        <span className="text-cyan-400 font-bold">GET /freefireinfo/stats</span>
-                        <span className="text-slate-400">Stats BR / CS Ranked</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
           </div>
         )}
 
@@ -4700,6 +4747,15 @@ export default function AdminDashboardPage() {
                       placeholder="https://... o sube una imagen"
                       helperText="Se mostrará como avatar de la categoría en la tienda y el panel"
                     />
+
+                    {/* Requisitos dinámicos para la Categoría */}
+                    <div className="pt-2">
+                      <DynamicFieldsBuilder
+                        fields={unifiedCatFields}
+                        onChange={setUnifiedCatFields}
+                        levelName="Categoría"
+                      />
+                    </div>
                   </div>
                 )}
               </div>
@@ -4777,6 +4833,15 @@ export default function AdminDashboardPage() {
                       onChange={setNewSubcatImage}
                       placeholder="https://... o sube una imagen"
                     />
+
+                    {/* Requisitos dinámicos para la Subcategoría */}
+                    <div className="pt-2">
+                      <DynamicFieldsBuilder
+                        fields={unifiedSubcatFields}
+                        onChange={setUnifiedSubcatFields}
+                        levelName="Subcategoría"
+                      />
+                    </div>
                   </div>
                 )}
               </div>
@@ -4810,10 +4875,11 @@ export default function AdminDashboardPage() {
                       type="number"
                       step="0.01"
                       required={subproductsList.length === 0}
+                      disabled={isDesigner}
                       value={unifiedProdPrice}
                       onChange={(e) => setUnifiedProdPrice(e.target.value)}
                       placeholder={subproductsList.length > 0 ? "Opcional (se toma el menor)" : "0.95"}
-                      className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 focus:border-amber-500 text-sm text-white font-bold font-mono outline-none"
+                      className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 focus:border-amber-500 text-sm text-white font-bold font-mono outline-none disabled:opacity-50"
                     />
                   </div>
                   <div>
@@ -4823,10 +4889,11 @@ export default function AdminDashboardPage() {
                     <input
                       type="number"
                       step="0.01"
+                      disabled={isDesigner}
                       value={unifiedProdCost}
                       onChange={(e) => setUnifiedProdCost(e.target.value)}
                       placeholder={subproductsList.length > 0 ? "Opcional" : "0.68"}
-                      className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 focus:border-amber-500 text-sm text-white font-bold font-mono outline-none"
+                      className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 focus:border-amber-500 text-sm text-white font-bold font-mono outline-none disabled:opacity-50"
                     />
                   </div>
                 </div>
@@ -4947,6 +5014,15 @@ export default function AdminDashboardPage() {
                     )}
                   </div>
                 )}
+
+                {/* Requisitos dinámicos requeridos para el producto principal */}
+                <div className="pt-2 border-t border-slate-800/80">
+                  <DynamicFieldsBuilder
+                    fields={unifiedProdFields}
+                    onChange={setUnifiedProdFields}
+                    levelName="Producto Principal"
+                  />
+                </div>
               </div>
 
               {/* ========================================================== */}
@@ -5035,6 +5111,7 @@ export default function AdminDashboardPage() {
                               type="number"
                               step="0.01"
                               required
+                              disabled={isDesigner}
                               value={sp.precio_base}
                               onChange={(e) => {
                                 const val = e.target.value;
@@ -5043,7 +5120,7 @@ export default function AdminDashboardPage() {
                                 );
                               }}
                               placeholder="0.95"
-                              className="w-full px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white outline-none focus:border-emerald-500 font-mono font-bold"
+                              className="w-full px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white outline-none focus:border-emerald-500 font-mono font-bold disabled:opacity-50"
                             />
                           </div>
 
@@ -5052,6 +5129,7 @@ export default function AdminDashboardPage() {
                             <input
                               type="number"
                               step="0.01"
+                              disabled={isDesigner}
                               value={sp.costo_proveedor}
                               onChange={(e) => {
                                 const val = e.target.value;
@@ -5060,7 +5138,7 @@ export default function AdminDashboardPage() {
                                 );
                               }}
                               placeholder="0.68"
-                              className="w-full px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white outline-none focus:border-emerald-500 font-mono"
+                              className="w-full px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white outline-none focus:border-emerald-500 font-mono disabled:opacity-50"
                             />
                           </div>
                         </div>
@@ -5077,6 +5155,19 @@ export default function AdminDashboardPage() {
                           placeholder="https://... o subir imagen de este paquete"
                           helperText="Si no se sube, se usará la imagen general del producto"
                         />
+
+                        {/* Requisitos dinámicos para este subproducto */}
+                        <div className="pt-2 border-t border-slate-800/60">
+                          <DynamicFieldsBuilder
+                            fields={sp.requisitos_dinamicos || []}
+                            onChange={(newReqs) => {
+                              setSubproductsList((prev) =>
+                                prev.map((item) => (item.id === sp.id ? { ...item, requisitos_dinamicos: newReqs } : item))
+                              );
+                            }}
+                            levelName={`Paquete #${idx + 1}`}
+                          />
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -5167,10 +5258,11 @@ export default function AdminDashboardPage() {
                             <input
                               type="number"
                               step="0.01"
+                              disabled={isDesigner}
                               value={unifiedRefVes}
                               onChange={(e) => setUnifiedRefVes(e.target.value)}
                               placeholder="1.05"
-                              className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white font-mono font-bold outline-none focus:border-amber-500"
+                              className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white font-mono font-bold outline-none focus:border-amber-500 disabled:opacity-50"
                             />
                             {unifiedRefVes && !isNaN(parseFloat(unifiedRefVes)) && parseFloat(tasaVes) > 0 && (
                               <span className="text-[11px] font-mono text-amber-300 shrink-0 font-bold bg-amber-950/60 px-2 py-1.5 rounded-lg border border-amber-500/30">
@@ -5191,10 +5283,11 @@ export default function AdminDashboardPage() {
                             <input
                               type="number"
                               step="0.01"
+                              disabled={isDesigner}
                               value={unifiedFijoVes}
                               onChange={(e) => setUnifiedFijoVes(e.target.value)}
                               placeholder="45.00"
-                              className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white font-mono font-bold outline-none focus:border-amber-500"
+                              className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white font-mono font-bold outline-none focus:border-amber-500 disabled:opacity-50"
                             />
                           </div>
                         </div>
@@ -5261,10 +5354,11 @@ export default function AdminDashboardPage() {
                             <input
                               type="number"
                               step="0.01"
+                              disabled={isDesigner}
                               value={unifiedFijoMxn}
                               onChange={(e) => setUnifiedFijoMxn(e.target.value)}
                               placeholder="25.00"
-                              className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white font-mono font-bold outline-none focus:border-emerald-500"
+                              className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white font-mono font-bold outline-none focus:border-emerald-500 disabled:opacity-50"
                             />
                           </div>
                           <span className="text-[10px] text-slate-400 block mt-1">
@@ -5283,10 +5377,11 @@ export default function AdminDashboardPage() {
                             <input
                               type="number"
                               step="0.01"
+                              disabled={isDesigner}
                               value={unifiedRefMxn}
                               onChange={(e) => setUnifiedRefMxn(e.target.value)}
                               placeholder="1.00"
-                              className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white font-mono font-bold outline-none focus:border-emerald-500"
+                              className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white font-mono font-bold outline-none focus:border-emerald-500 disabled:opacity-50"
                             />
                             {unifiedRefMxn && !isNaN(parseFloat(unifiedRefMxn)) && parseFloat(tasaMxn) > 0 && (
                               <span className="text-[11px] font-mono text-emerald-300 shrink-0 font-bold bg-emerald-950/60 px-2 py-1.5 rounded-lg border border-emerald-500/30">
@@ -5340,39 +5435,13 @@ export default function AdminDashboardPage() {
                           <p className="text-[11px] text-slate-300">
                             Ingresa el precio de venta en USD exclusivo para cada rango (los que dejes vacíos usarán el cálculo porcentual automático):
                           </p>
-                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                            {(rankRules.length > 0
-                              ? rankRules
-                              : [
-                                  { id: "1", rango: "default", porcentaje_ganancia: 20, descripcion: "Cliente Estándar" },
-                                  { id: "2", rango: "bronce", porcentaje_ganancia: 15, descripcion: "Bronce" },
-                                  { id: "3", rango: "plata", porcentaje_ganancia: 12, descripcion: "Plata" },
-                                  { id: "4", rango: "oro", porcentaje_ganancia: 8, descripcion: "Oro" },
-                                  { id: "5", rango: "diamante", porcentaje_ganancia: 4, descripcion: "Diamante Mayorista" },
-                                ]
-                            ).map((r) => (
-                              <div key={r.rango} className="p-2 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
-                                <div className="flex items-center justify-between text-[10px] font-mono">
-                                  <span className="font-bold uppercase text-purple-300">{r.rango}</span>
-                                  <span className="text-slate-500">+{r.porcentaje_ganancia}%</span>
-                                </div>
-                                <div className="flex items-center gap-1">
-                                  <span className="text-xs text-slate-400 font-mono">$</span>
-                                  <input
-                                    type="number"
-                                    step="0.01"
-                                    value={unifiedRankPrices[r.rango] || ""}
-                                    onChange={(e) => {
-                                      const val = e.target.value;
-                                      setUnifiedRankPrices((prev) => ({ ...prev, [r.rango]: val }));
-                                    }}
-                                    placeholder={unifiedProdPrice || "0.00"}
-                                    className="w-full px-2 py-1 rounded-lg bg-slate-950 border border-slate-700 text-xs text-white font-mono font-bold outline-none focus:border-purple-500"
-                                  />
-                                </div>
-                              </div>
-                            ))}
-                          </div>
+                          <RankPricingSection
+                            rankRules={rankRules}
+                            prices={unifiedRankPrices}
+                            onChange={(rango, val) => setUnifiedRankPrices((prev) => ({ ...prev, [rango]: val }))}
+                            basePricePlaceholder={unifiedProdPrice}
+                            isDesigner={isDesigner}
+                          />
                         </div>
                       )}
                     </div>
@@ -5443,10 +5512,11 @@ export default function AdminDashboardPage() {
                     type="number"
                     step="0.01"
                     required
+                    disabled={isDesigner}
                     value={varPrice}
                     onChange={(e) => setVarPrice(e.target.value)}
                     placeholder="4.75"
-                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 focus:border-cyan-500 text-sm text-white font-mono font-bold outline-none"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 focus:border-cyan-500 text-sm text-white font-mono font-bold outline-none disabled:opacity-50"
                   />
                 </div>
                 <div>
@@ -5454,10 +5524,11 @@ export default function AdminDashboardPage() {
                   <input
                     type="number"
                     step="0.01"
+                    disabled={isDesigner}
                     value={varCost}
                     onChange={(e) => setVarCost(e.target.value)}
                     placeholder="3.50"
-                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 focus:border-cyan-500 text-sm text-white font-mono outline-none"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 focus:border-cyan-500 text-sm text-white font-mono outline-none disabled:opacity-50"
                   />
                 </div>
               </div>
@@ -5469,6 +5540,15 @@ export default function AdminDashboardPage() {
                 placeholder="https://... o subir archivo"
                 helperText="Si no se especifica, tomará la imagen del producto principal"
               />
+
+              {/* Requisitos dinámicos para el subproducto */}
+              <div className="pt-1">
+                <DynamicFieldsBuilder
+                  fields={addVarFields}
+                  onChange={setAddVarFields}
+                  levelName="Subproducto"
+                />
+              </div>
 
               <div className="flex justify-end gap-3 pt-2 border-t border-slate-800">
                 <button
@@ -5530,6 +5610,15 @@ export default function AdminDashboardPage() {
                   checked={catActive}
                   onChange={(e) => setCatActive(e.target.checked)}
                   className="w-4 h-4 accent-fuchsia-500 cursor-pointer"
+                />
+              </div>
+
+              {/* Requisitos dinámicos para la categoría */}
+              <div className="pt-1">
+                <DynamicFieldsBuilder
+                  fields={catDynamicFields}
+                  onChange={setCatDynamicFields}
+                  levelName="Categoría"
                 />
               </div>
 
@@ -5887,9 +5976,10 @@ export default function AdminDashboardPage() {
                       type="number"
                       step="0.01"
                       required
+                      disabled={isDesigner}
                       value={editProdPrice}
                       onChange={(e) => setEditProdPrice(e.target.value)}
-                      className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 focus:border-amber-500 text-sm text-white font-bold font-mono outline-none"
+                      className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 focus:border-amber-500 text-sm text-white font-bold font-mono outline-none disabled:opacity-50"
                     />
                   </div>
                   <div>
@@ -5897,9 +5987,10 @@ export default function AdminDashboardPage() {
                     <input
                       type="number"
                       step="0.01"
+                      disabled={isDesigner}
                       value={editProdCost}
                       onChange={(e) => setEditProdCost(e.target.value)}
-                      className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 focus:border-amber-500 text-sm text-white font-mono outline-none"
+                      className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 focus:border-amber-500 text-sm text-white font-mono outline-none disabled:opacity-50"
                     />
                   </div>
                 </div>
@@ -5989,6 +6080,15 @@ export default function AdminDashboardPage() {
                     )}
                   </div>
                 )}
+
+                {/* Requisitos dinámicos para el producto */}
+                <div className="pt-2 border-t border-slate-800/80">
+                  <DynamicFieldsBuilder
+                    fields={editProdFields}
+                    onChange={setEditProdFields}
+                    levelName="Producto"
+                  />
+                </div>
               </div>
 
               {/* CONFIGURACIÓN DE DIVISAS: VES Y MXN */}
@@ -6057,10 +6157,11 @@ export default function AdminDashboardPage() {
                         <input
                           type="number"
                           step="0.01"
+                          disabled={isDesigner}
                           value={editRefVes}
                           onChange={(e) => setEditRefVes(e.target.value)}
                           placeholder="1.05"
-                          className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white font-mono font-bold outline-none focus:border-amber-500"
+                          className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white font-mono font-bold outline-none focus:border-amber-500 disabled:opacity-50"
                         />
                         {editRefVes && !isNaN(parseFloat(editRefVes)) && parseFloat(tasaVes) > 0 && (
                           <span className="text-[11px] font-mono text-amber-300 shrink-0 font-bold bg-amber-950/60 px-2 py-1.5 rounded-lg border border-amber-500/30">
@@ -6081,10 +6182,11 @@ export default function AdminDashboardPage() {
                         <input
                           type="number"
                           step="0.01"
+                          disabled={isDesigner}
                           value={editFijoVes}
                           onChange={(e) => setEditFijoVes(e.target.value)}
                           placeholder="45.00"
-                          className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white font-mono font-bold outline-none focus:border-amber-500"
+                          className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white font-mono font-bold outline-none focus:border-amber-500 disabled:opacity-50"
                         />
                       </div>
                     </div>
@@ -6151,10 +6253,11 @@ export default function AdminDashboardPage() {
                         <input
                           type="number"
                           step="0.01"
+                          disabled={isDesigner}
                           value={editFijoMxn}
                           onChange={(e) => setEditFijoMxn(e.target.value)}
                           placeholder="25.00"
-                          className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white font-mono font-bold outline-none focus:border-emerald-500"
+                          className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white font-mono font-bold outline-none focus:border-emerald-500 disabled:opacity-50"
                         />
                       </div>
                       <span className="text-[10px] text-slate-400 block mt-1">
@@ -6173,10 +6276,11 @@ export default function AdminDashboardPage() {
                         <input
                           type="number"
                           step="0.01"
+                          disabled={isDesigner}
                           value={editRefMxn}
                           onChange={(e) => setEditRefMxn(e.target.value)}
                           placeholder="1.00"
-                          className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white font-mono font-bold outline-none focus:border-emerald-500"
+                          className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white font-mono font-bold outline-none focus:border-emerald-500 disabled:opacity-50"
                         />
                         {editRefMxn && !isNaN(parseFloat(editRefMxn)) && parseFloat(tasaMxn) > 0 && (
                           <span className="text-[11px] font-mono text-emerald-300 shrink-0 font-bold bg-emerald-950/60 px-2 py-1.5 rounded-lg border border-emerald-500/30">
@@ -6228,39 +6332,13 @@ export default function AdminDashboardPage() {
                     <p className="text-[11px] text-slate-300">
                       Ingresa el precio de venta en USD exclusivo para cada rango (los que dejes vacíos usarán el cálculo automático):
                     </p>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                      {(rankRules.length > 0
-                        ? rankRules
-                        : [
-                            { id: "1", rango: "default", porcentaje_ganancia: 20, descripcion: "Cliente Estándar" },
-                            { id: "2", rango: "bronce", porcentaje_ganancia: 15, descripcion: "Bronce" },
-                            { id: "3", rango: "plata", porcentaje_ganancia: 12, descripcion: "Plata" },
-                            { id: "4", rango: "oro", porcentaje_ganancia: 8, descripcion: "Oro" },
-                            { id: "5", rango: "diamante", porcentaje_ganancia: 4, descripcion: "Diamante Mayorista" },
-                          ]
-                      ).map((r) => (
-                        <div key={r.rango} className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
-                          <div className="flex items-center justify-between text-[10px] font-mono">
-                            <span className="font-bold uppercase text-purple-300">{r.rango}</span>
-                            <span className="text-slate-500">+{r.porcentaje_ganancia}%</span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <span className="text-xs text-slate-400 font-mono">$</span>
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={editRankPrices[r.rango] || ""}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                setEditRankPrices((prev) => ({ ...prev, [r.rango]: val }));
-                              }}
-                              placeholder={editProdPrice || "0.00"}
-                              className="w-full px-2 py-1 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white font-mono font-bold outline-none focus:border-purple-500"
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                    <RankPricingSection
+                      rankRules={rankRules}
+                      prices={editRankPrices}
+                      onChange={(rango, val) => setEditRankPrices((prev) => ({ ...prev, [rango]: val }))}
+                      basePricePlaceholder={editProdPrice}
+                      isDesigner={isDesigner}
+                    />
                   </div>
                 )}
               </div>
@@ -6362,9 +6440,10 @@ export default function AdminDashboardPage() {
                       type="number"
                       step="0.01"
                       required
+                      disabled={isDesigner}
                       value={editVarPrice}
                       onChange={(e) => setEditVarPrice(e.target.value)}
-                      className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 focus:border-cyan-500 text-sm text-white font-bold font-mono outline-none"
+                      className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 focus:border-cyan-500 text-sm text-white font-bold font-mono outline-none disabled:opacity-50"
                     />
                   </div>
                   <div>
@@ -6372,9 +6451,10 @@ export default function AdminDashboardPage() {
                     <input
                       type="number"
                       step="0.01"
+                      disabled={isDesigner}
                       value={editVarCost}
                       onChange={(e) => setEditVarCost(e.target.value)}
-                      className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 focus:border-cyan-500 text-sm text-white font-mono outline-none"
+                      className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 focus:border-cyan-500 text-sm text-white font-mono outline-none disabled:opacity-50"
                     />
                   </div>
                 </div>
@@ -6394,6 +6474,15 @@ export default function AdminDashboardPage() {
                     checked={editVarActive}
                     onChange={(e) => setEditVarActive(e.target.checked)}
                     className="w-4 h-4 accent-cyan-500 cursor-pointer"
+                  />
+                </div>
+
+                {/* Requisitos dinámicos para el subproducto */}
+                <div className="pt-2 border-t border-slate-800/80">
+                  <DynamicFieldsBuilder
+                    fields={editVarFields}
+                    onChange={setEditVarFields}
+                    levelName="Subproducto"
                   />
                 </div>
               </div>
@@ -6462,10 +6551,11 @@ export default function AdminDashboardPage() {
                         <input
                           type="number"
                           step="0.01"
+                          disabled={isDesigner}
                           value={editVarRefVes}
                           onChange={(e) => setEditVarRefVes(e.target.value)}
                           placeholder="1.05"
-                          className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white font-mono font-bold outline-none focus:border-amber-500"
+                          className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white font-mono font-bold outline-none focus:border-amber-500 disabled:opacity-50"
                         />
                       </div>
                     </div>
@@ -6481,10 +6571,11 @@ export default function AdminDashboardPage() {
                         <input
                           type="number"
                           step="0.01"
+                          disabled={isDesigner}
                           value={editVarFijoVes}
                           onChange={(e) => setEditVarFijoVes(e.target.value)}
                           placeholder="45.00"
-                          className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white font-mono font-bold outline-none focus:border-amber-500"
+                          className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white font-mono font-bold outline-none focus:border-amber-500 disabled:opacity-50"
                         />
                       </div>
                     </div>
@@ -6549,10 +6640,11 @@ export default function AdminDashboardPage() {
                         <input
                           type="number"
                           step="0.01"
+                          disabled={isDesigner}
                           value={editVarFijoMxn}
                           onChange={(e) => setEditVarFijoMxn(e.target.value)}
                           placeholder="25.00"
-                          className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white font-mono font-bold outline-none focus:border-emerald-500"
+                          className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white font-mono font-bold outline-none focus:border-emerald-500 disabled:opacity-50"
                         />
                       </div>
                     </div>
@@ -6568,10 +6660,11 @@ export default function AdminDashboardPage() {
                         <input
                           type="number"
                           step="0.01"
+                          disabled={isDesigner}
                           value={editVarRefMxn}
                           onChange={(e) => setEditVarRefMxn(e.target.value)}
                           placeholder="1.00"
-                          className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white font-mono font-bold outline-none focus:border-emerald-500"
+                          className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white font-mono font-bold outline-none focus:border-emerald-500 disabled:opacity-50"
                         />
                       </div>
                     </div>
@@ -6618,39 +6711,13 @@ export default function AdminDashboardPage() {
                     <p className="text-[11px] text-slate-300">
                       Ingresa el precio de venta en USD exclusivo de este paquete para cada rango:
                     </p>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                      {(rankRules.length > 0
-                        ? rankRules
-                        : [
-                            { id: "1", rango: "default", porcentaje_ganancia: 20, descripcion: "Cliente Estándar" },
-                            { id: "2", rango: "bronce", porcentaje_ganancia: 15, descripcion: "Bronce" },
-                            { id: "3", rango: "plata", porcentaje_ganancia: 12, descripcion: "Plata" },
-                            { id: "4", rango: "oro", porcentaje_ganancia: 8, descripcion: "Oro" },
-                            { id: "5", rango: "diamante", porcentaje_ganancia: 4, descripcion: "Diamante Mayorista" },
-                          ]
-                      ).map((r) => (
-                        <div key={r.rango} className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
-                          <div className="flex items-center justify-between text-[10px] font-mono">
-                            <span className="font-bold uppercase text-purple-300">{r.rango}</span>
-                            <span className="text-slate-500">+{r.porcentaje_ganancia}%</span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <span className="text-xs text-slate-400 font-mono">$</span>
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={editVarRankPrices[r.rango] || ""}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                setEditVarRankPrices((prev) => ({ ...prev, [r.rango]: val }));
-                              }}
-                              placeholder={editVarPrice || "0.00"}
-                              className="w-full px-2 py-1 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white font-mono font-bold outline-none focus:border-purple-500"
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                    <RankPricingSection
+                      rankRules={rankRules}
+                      prices={editVarRankPrices}
+                      onChange={(rango, val) => setEditVarRankPrices((prev) => ({ ...prev, [rango]: val }))}
+                      basePricePlaceholder={editVarPrice}
+                      isDesigner={isDesigner}
+                    />
                   </div>
                 )}
               </div>

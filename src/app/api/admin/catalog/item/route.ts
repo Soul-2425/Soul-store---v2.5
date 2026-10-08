@@ -32,12 +32,18 @@ export async function POST(request: Request) {
         .replace(/(^-|-$)+/g, "")}-${Date.now().toString().slice(-4)}`;
 
       const [newCat] = await sql`
-        INSERT INTO public.categorias (nombre, slug, imagen_url, activo)
-        VALUES (${categoryName}, ${catSlug}, ${categoria.imagen_url || null}, TRUE)
-        RETURNING id, nombre, slug, imagen_url
+        INSERT INTO public.categorias (nombre, slug, imagen_url, activo, requisitos_dinamicos)
+        VALUES (${categoryName}, ${catSlug}, ${categoria.imagen_url || null}, TRUE, ${sql.json(categoria.requisitos_dinamicos || [])})
+        RETURNING id, nombre, slug, imagen_url, requisitos_dinamicos
       `;
       categoryId = newCat.id;
       categoryName = newCat.nombre;
+    } else if (categoria?.requisitos_dinamicos) {
+      await sql`
+        UPDATE public.categorias
+        SET requisitos_dinamicos = ${sql.json(categoria.requisitos_dinamicos)}
+        WHERE id = ${categoryId}
+      `;
     }
 
     // ==========================================
@@ -54,12 +60,18 @@ export async function POST(request: Request) {
         .replace(/(^-|-$)+/g, "")}-${Date.now().toString().slice(-4)}`;
 
       const [newSub] = await sql`
-        INSERT INTO public.subcategorias (categoria_id, nombre, slug, imagen_url, activo)
-        VALUES (${categoryId}, ${finalSubName}, ${subSlug}, ${subcategoria?.imagen_url || null}, TRUE)
-        RETURNING id, nombre, slug, imagen_url
+        INSERT INTO public.subcategorias (categoria_id, nombre, slug, imagen_url, activo, requisitos_dinamicos)
+        VALUES (${categoryId}, ${finalSubName}, ${subSlug}, ${subcategoria?.imagen_url || null}, TRUE, ${sql.json(subcategoria?.requisitos_dinamicos || [])})
+        RETURNING id, nombre, slug, imagen_url, requisitos_dinamicos
       `;
       subcategoryId = newSub.id;
       subcategoryName = newSub.nombre;
+    } else if (subcategoria?.requisitos_dinamicos) {
+      await sql`
+        UPDATE public.subcategorias
+        SET requisitos_dinamicos = ${sql.json(subcategoria.requisitos_dinamicos)}
+        WHERE id = ${subcategoryId}
+      `;
     }
 
     // ==========================================
@@ -104,7 +116,8 @@ export async function POST(request: Request) {
         precio_ref_mxn,
         precio_fijo_mxn,
         activo,
-        oferta_especial
+        oferta_especial,
+        requisitos_dinamicos
       )
       VALUES (
         ${subcategoryId},
@@ -120,7 +133,8 @@ export async function POST(request: Request) {
         ${parseFloat(producto.precio_ref_mxn) || null},
         ${parseFloat(producto.precio_fijo_mxn) || null},
         ${producto.activo !== undefined ? producto.activo : true},
-        ${producto.oferta_especial !== undefined ? producto.oferta_especial : false}
+        ${producto.oferta_especial !== undefined ? producto.oferta_especial : false},
+        ${sql.json(producto.requisitos_dinamicos || [])}
       )
       RETURNING *
     `;
@@ -164,7 +178,8 @@ export async function POST(request: Request) {
               precio_fijo_mxn,
               imagen_url,
               activo,
-              orden
+              orden,
+              requisitos_dinamicos
             )
             VALUES (
               ${newProduct.id},
@@ -177,7 +192,8 @@ export async function POST(request: Request) {
               ${parseFloat(item.precio_fijo_mxn) || null},
               ${item.imagen_url || producto.imagen_url || null},
               TRUE,
-              ${i}
+              ${i},
+              ${sql.json(item.requisitos_dinamicos || [])}
             )
             RETURNING *
           `;
