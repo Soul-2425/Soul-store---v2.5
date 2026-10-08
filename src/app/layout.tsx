@@ -4,6 +4,12 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Soul Store | Plataforma de Venta y Gestión B2B/B2C",
   description: "Recargas de juegos, streaming, cuentas exclusivas y panel para revendedores con tasas de cambio multidivisa en tiempo real.",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Soul Store",
+  },
 };
 
 export const viewport: Viewport = {

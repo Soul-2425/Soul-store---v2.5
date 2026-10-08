@@ -26,9 +26,12 @@ export async function POST(request: Request) {
     let isAdmin = Boolean(body.isAdmin || body.is_admin);
     const finalUserId = userId || clientUserId || null;
 
-    if (finalUserId) {
+    const isValidUuid = (id: any) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id.trim());
+    const validUserId = isValidUuid(finalUserId) ? finalUserId.trim() : null;
+
+    if (validUserId) {
       try {
-        const [u] = await sql`SELECT rango FROM public.usuarios WHERE id = ${finalUserId}::uuid`;
+        const [u] = await sql`SELECT rango FROM public.usuarios WHERE id = ${validUserId}::uuid`;
         if (u && String(u.rango).toLowerCase() === 'admin') {
           isAdmin = true;
         }
@@ -46,7 +49,7 @@ export async function POST(request: Request) {
     await sql`
       INSERT INTO public.push_subscriptions (user_id, endpoint, p256dh, auth, user_agent, is_admin, created_at)
       VALUES (
-        ${finalUserId ? finalUserId : null}::uuid, 
+        ${validUserId ? validUserId : null}::uuid, 
         ${endpoint}, 
         ${p256dh}, 
         ${auth}, 
@@ -62,7 +65,7 @@ export async function POST(request: Request) {
           user_agent = EXCLUDED.user_agent
     `;
 
-    return NextResponse.json({ success: true, userId: finalUserId, isAdmin });
+    return NextResponse.json({ success: true, userId: validUserId, isAdmin });
   } catch (error: any) {
     console.error('Error in subscribe route:', error);
     return NextResponse.json({ error: 'Internal Server Error', details: error.message }, { status: 500 });

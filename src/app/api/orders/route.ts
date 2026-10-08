@@ -361,7 +361,7 @@ export async function POST(request: Request) {
       title: "🟢 Soul Store • Nuevo Pedido",
       body: `📦 *#SOUL-${pedido.id.slice(0, 8).toUpperCase()}* de ${safeNombre} por *$${precioUsd} USD* (${producto.nombre}${variantName ? " - " + variantName : ""}). Toca para ver y despachar.`,
       url: "/admin",
-      icon: "/images/whatsapp-icon.png",
+      icon: "/icon.png",
       badge: "/badge.png",
       tag: `new-order-${pedido.id}`,
     }).catch(console.error);

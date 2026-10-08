@@ -82,7 +82,7 @@ export async function PATCH(
             title: "🟢 Soul Store • ¡Tu pedido está listo! ✅",
             body: `🎉 ¡Hola! Tu recarga de "${orderInfo.producto_nombre}" ha sido entregada exitosamente. Revisa tu cuenta del juego o servicio.`,
             url: "/",
-            icon: "/images/whatsapp-icon.png",
+            icon: "/icon.png",
             badge: "/badge.png",
             tag: `order-delivered-${orderInfo.pedido_id}`,
           }).then((sent) => {

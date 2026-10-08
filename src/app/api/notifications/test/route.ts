@@ -20,7 +20,7 @@ export async function POST(request: Request) {
       title: testTitle,
       body: testBody,
       url: "/admin",
-      icon: "/images/whatsapp-icon.png",
+      icon: "/icon.png",
       badge: "/badge.png",
       tag: `test-push-${Date.now()}`,
     });

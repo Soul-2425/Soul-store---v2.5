@@ -2410,6 +2410,74 @@ export default function AdminDashboardPage() {
               </button>
             </div>
 
+            {/* Banner Informativo y Control de Alertas Push para Administrador */}
+            <div className={`p-4 rounded-2xl border transition-all ${
+              pushSubscribed 
+                ? "bg-emerald-950/20 border-emerald-500/40" 
+                : "bg-gradient-to-r from-amber-950/40 via-yellow-950/20 to-slate-900 border-amber-500/40"
+            }`}>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                    pushSubscribed ? "bg-emerald-500/20 text-emerald-400" : "bg-amber-500/20 text-amber-400"
+                  }`}>
+                    {pushSubscribed ? "🔔" : "⚠️"}
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                      <span>Notificaciones en Tiempo Real de Nuevos Pedidos</span>
+                      {pushSubscribed ? (
+                        <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-mono border border-emerald-500/30">
+                          ACTIVAS EN ESTE DISPOSITIVO
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10px] font-mono border border-amber-500/30">
+                          DESACTIVADAS EN ESTE DISPOSITIVO
+                        </span>
+                      )}
+                    </h3>
+                    <p className="text-xs text-slate-300 mt-0.5">
+                      {pushSubscribed
+                        ? "Tu teléfono o navegador recibirá una alerta con sonido y vibración instantáneamente cuando entre un nuevo pedido."
+                        : "Activa las alertas en este teléfono para recibir una notificación en la pantalla de bloqueo y barra de estado cada vez que un cliente realice una compra."}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  {pushSubscribed ? (
+                    <button
+                      type="button"
+                      onClick={handleTestPush}
+                      disabled={testingPush}
+                      className="w-full sm:w-auto px-4 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 font-bold text-xs transition flex items-center justify-center gap-2"
+                    >
+                      {testingPush ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <span>🧪 Probar Alerta en mi Teléfono</span>}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleEnablePush}
+                      disabled={subscribingPush}
+                      className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#FFF01F] to-amber-400 hover:from-yellow-300 hover:to-amber-300 text-slate-950 font-black text-xs transition flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(255,240,31,0.3)]"
+                    >
+                      {subscribingPush ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>Activando...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>📲</span>
+                          <span>Activar Alertas en este Teléfono</span>
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
             {loadingOrders ? (
               <div className="glass-panel p-8 rounded-2xl flex items-center justify-center gap-3 text-sm text-slate-400">
                 <Loader2 className="w-5 h-5 animate-spin text-fuchsia-400" />

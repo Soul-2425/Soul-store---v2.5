@@ -1,0 +1,23 @@
+{
+  "name": "Soul Store",
+  "short_name": "Soul Store",
+  "description": "Recargas de juegos, streaming y cuentas digitales",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0B0D13",
+  "theme_color": "#D61A1A",
+  "icons": [
+    {
+      "src": "/icon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

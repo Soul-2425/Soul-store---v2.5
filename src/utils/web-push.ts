@@ -1,12 +1,24 @@
 import webpush from 'web-push';
 import { sql } from '@/lib/db';
 
-const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY;
-const vapidSubject = process.env.VAPID_SUBJECT || 'mailto:soporte@soulstore.com';
+const DEFAULT_VAPID_PUBLIC_KEY =
+  'BHMT_to0ViXP-2jqt3MSXODstv5Xqq7YsdaouWOeLRtKPsC6AXl6WAqGqSYovGXRVtGk86A4JO7M2tzjS_rfZkI';
+const DEFAULT_VAPID_PRIVATE_KEY =
+  'SIvsoB1puhpIjcFsdZCfBILvXJGJ9iOBYRG6qdlAoBQ';
+const DEFAULT_VAPID_SUBJECT = 'mailto:soporte@soulstore.com';
 
-if (vapidPublicKey && vapidPrivateKey) {
-  webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);
+function ensureVapidConfig() {
+  const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || DEFAULT_VAPID_PUBLIC_KEY;
+  const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY || DEFAULT_VAPID_PRIVATE_KEY;
+  const vapidSubject = process.env.VAPID_SUBJECT || DEFAULT_VAPID_SUBJECT;
+
+  try {
+    webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);
+    return true;
+  } catch (err) {
+    console.error('[WebPush] Error al configurar VAPID details:', err);
+    return false;
+  }
 }
 
 export interface PushNotificationPayload {
@@ -25,16 +37,20 @@ export async function sendPushNotification(userId: string | null | undefined, pa
   if (!userId) return false;
 
   try {
+    if (!ensureVapidConfig()) {
+      console.error('[WebPush] No se pudo inicializar la configuración VAPID.');
+      return false;
+    }
+
     const formattedPayload = {
       title: payload.title || '🟢 Soul Store',
       body: payload.body,
       url: payload.url || '/',
-      icon: payload.icon || '/images/whatsapp-icon.png',
+      icon: payload.icon || '/icon.png',
       badge: payload.badge || '/badge.png',
       tag: payload.tag || `soul-notif-${Date.now()}`,
     };
 
-    // sql directly returns an array with postgres library
     const subs = await sql`
       SELECT endpoint, p256dh, auth 
       FROM public.push_subscriptions 
@@ -46,6 +62,13 @@ export async function sendPushNotification(userId: string | null | undefined, pa
       return false;
     }
 
+    console.log(`[WebPush] Enviando notificación a ${subs.length} dispositivo(s) para usuario ${userId}`);
+
+    const pushOptions: webpush.RequestOptions = {
+      TTL: 86400, // 24 horas
+      urgency: 'high', // Prioridad ALTA para despertar Android Doze mode
+    };
+
     const promises = subs.map(async (sub: any) => {
       const pushSubscription = {
         endpoint: sub.endpoint,
@@ -56,14 +79,14 @@ export async function sendPushNotification(userId: string | null | undefined, pa
       };
 
       try {
-        await webpush.sendNotification(pushSubscription, JSON.stringify(formattedPayload));
-        console.log(`[WebPush] Notificación enviada con éxito a ${sub.endpoint.slice(0, 30)}...`);
+        await webpush.sendNotification(pushSubscription, JSON.stringify(formattedPayload), pushOptions);
+        console.log(`[WebPush] Notificación enviada con éxito a ${sub.endpoint.slice(0, 35)}...`);
       } catch (error: any) {
         if (error.statusCode === 410 || error.statusCode === 404) {
           await sql`DELETE FROM public.push_subscriptions WHERE endpoint = ${sub.endpoint}`;
-          console.log(`[WebPush] Suscripción caducada eliminada: ${sub.endpoint.slice(0, 30)}`);
+          console.log(`[WebPush] Suscripción caducada eliminada: ${sub.endpoint.slice(0, 35)}`);
         } else {
-          console.error('[WebPush] Error enviando a endpoint:', sub.endpoint, error);
+          console.error('[WebPush] Error enviando a endpoint:', sub.endpoint.slice(0, 35), error?.message || error);
         }
       }
     });
@@ -81,11 +104,16 @@ export async function sendPushNotification(userId: string | null | undefined, pa
  */
 export async function notifyAdmins(payload: PushNotificationPayload) {
   try {
+    if (!ensureVapidConfig()) {
+      console.error('[WebPush] No se pudo inicializar la configuración VAPID para administradores.');
+      return false;
+    }
+
     const formattedPayload = {
       title: payload.title || '🟢 Soul Store • Nuevo Pedido',
       body: payload.body,
       url: payload.url || '/admin',
-      icon: payload.icon || '/images/whatsapp-icon.png',
+      icon: payload.icon || '/icon.png',
       badge: payload.badge || '/badge.png',
       tag: payload.tag || `admin-order-${Date.now()}`,
     };
@@ -108,6 +136,11 @@ export async function notifyAdmins(payload: PushNotificationPayload) {
 
     console.log(`[WebPush] Enviando notificación a ${uniqueMap.size} dispositivo(s) de administradores...`);
 
+    const pushOptions: webpush.RequestOptions = {
+      TTL: 86400, // 24 horas
+      urgency: 'high', // Prioridad ALTA para que suene y despierte el móvil en la barra del sistema
+    };
+
     const promises = Array.from(uniqueMap.values()).map(async (sub: any) => {
       const pushSubscription = {
         endpoint: sub.endpoint,
@@ -118,13 +151,14 @@ export async function notifyAdmins(payload: PushNotificationPayload) {
       };
 
       try {
-        await webpush.sendNotification(pushSubscription, JSON.stringify(formattedPayload));
-        console.log(`[WebPush] Notificación de Admin enviada con éxito.`);
+        await webpush.sendNotification(pushSubscription, JSON.stringify(formattedPayload), pushOptions);
+        console.log(`[WebPush] Notificación de Admin entregada con éxito a ${sub.endpoint.slice(0, 35)}`);
       } catch (error: any) {
         if (error.statusCode === 410 || error.statusCode === 404) {
           await sql`DELETE FROM public.push_subscriptions WHERE endpoint = ${sub.endpoint}`;
+          console.log(`[WebPush] Suscripción admin caducada eliminada: ${sub.endpoint.slice(0, 35)}`);
         } else {
-          console.error('[WebPush] Error enviando push a admin:', error);
+          console.error('[WebPush] Error enviando push a admin:', error?.message || error);
         }
       }
     });

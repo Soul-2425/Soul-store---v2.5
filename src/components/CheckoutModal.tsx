@@ -25,6 +25,7 @@ import {
   Key
 } from "lucide-react";
 import ImageUploadInput from "@/components/ImageUploadInput";
+import { urlBase64ToUint8Array } from "@/components/PushNotificationManager";
 
 interface Product {
   id: string;
@@ -388,14 +389,36 @@ export default function CheckoutModal({
         Object.values(dynamicValues)[0] || 
         "";
 
-      // Intentar obtener la suscripción push activa del navegador para vincularla a la orden
+      // Intentar obtener o suscribir push del cliente para notificarlo al completar su pedido
       let pushSubJson: any = null;
       try {
         if (typeof window !== "undefined" && "serviceWorker" in navigator && "PushManager" in window) {
-          const reg = await navigator.serviceWorker.ready;
-          const sub = await reg.pushManager.getSubscription();
-          if (sub) {
-            pushSubJson = sub.toJSON();
+          if (Notification.permission === "default") {
+            try {
+              await Notification.requestPermission();
+            } catch {}
+          }
+
+          if (Notification.permission === "granted") {
+            let reg = await navigator.serviceWorker.getRegistration();
+            if (!reg) {
+              reg = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+            }
+            await navigator.serviceWorker.ready;
+            let sub = await reg.pushManager.getSubscription();
+            if (!sub) {
+              const vapidKey =
+                process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ||
+                "BHMT_to0ViXP-2jqt3MSXODstv5Xqq7YsdaouWOeLRtKPsC6AXl6WAqGqSYovGXRVtGk86A4JO7M2tzjS_rfZkI";
+              sub = await reg.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: urlBase64ToUint8Array(vapidKey),
+              });
+            }
+            if (sub) {
+              pushSubJson = sub.toJSON();
+              localStorage.setItem("soul_push_endpoint", sub.endpoint);
+            }
           }
         }
       } catch (pErr) {
@@ -1039,6 +1062,15 @@ export default function CheckoutModal({
                     placeholder="https://... o sube captura"
                     helperText="Sube la captura de tu comprobante desde tu dispositivo o pega un enlace"
                   />
+                </div>
+
+                {/* Notificación de Alerta al Teléfono */}
+                <div className="flex items-center gap-2.5 p-3 rounded-2xl bg-gradient-to-r from-purple-950/40 to-slate-900 border border-purple-500/30 text-xs">
+                  <span className="text-base shrink-0">🔔</span>
+                  <div className="text-[11px] text-slate-300 leading-tight">
+                    <span className="font-bold text-white block">Aviso automático de entrega:</span>
+                    Recibirás una notificación en este teléfono tan pronto como tu orden sea completada.
+                  </div>
                 </div>
 
                 {/* Total Final y Botón de Confirmar Compra */}
