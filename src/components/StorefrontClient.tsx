@@ -27,7 +27,8 @@ import {
   Tv,
   Gamepad2,
   Gift,
-  ListFilter
+  ListFilter,
+  Copy
 } from "lucide-react";
 import CheckoutModal from "@/components/CheckoutModal";
 import { createClient } from "@/lib/supabase/client";
@@ -168,9 +169,9 @@ function MobileOffersCarousel({
               loading="lazy"
               decoding="async"
               onError={() => setImgError(true)}
-              className="absolute inset-0 w-full h-full object-cover"
+              className="absolute inset-0 w-full h-full object-contain p-2"
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/75 to-black/35" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/60 to-transparent pointer-events-none" />
           </>
         ) : (
           <>
@@ -252,6 +253,12 @@ export default function StorefrontClient({
 
   const [feedItems, setFeedItems] = useState<FeedItem[]>([]);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(initialUser);
+
+  // Paginación del Catálogo
+  const [categoriesPage, setCategoriesPage] = useState(1);
+  const [subcategoriesPage, setSubcategoriesPage] = useState(1);
+  const [productsPage, setProductsPage] = useState(1);
+  const [copiedLink, setCopiedLink] = useState<string | null>(null);
 
   const supabase = createClient();
 
@@ -337,6 +344,101 @@ export default function StorefrontClient({
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
   }, []);
+
+  // Detección inicial de URL para deep linking directo de productos, variantes o categorías
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const catParam = params.get("categoria");
+      const subParam = params.get("subcategoria");
+      const prodParam = params.get("producto");
+      const varParam = params.get("variante");
+
+      if (catParam) {
+        const foundCat = categoriesList.find(c => c.slug === catParam || c.id === catParam);
+        if (foundCat) {
+          setActiveCategoryFilter(foundCat.id);
+          setCatalogViewMode("categories");
+        }
+      }
+
+      if (subParam) {
+        const foundSub = subcategoriesList.find(s => s.slug === subParam || s.id === subParam);
+        if (foundSub) {
+          setActiveSubcategoryFilter(foundSub.id);
+        }
+      }
+
+      if (prodParam) {
+        const foundProd = productsList.find(p => p.slug === prodParam || p.id === prodParam);
+        if (foundProd) {
+          setSelectedProduct(foundProd);
+          if (varParam) {
+            const foundVar = variantsList.find(v => v.id === varParam || v.sku === varParam);
+            if (foundVar) {
+              setSelectedVariant(foundVar);
+            }
+          }
+        }
+      }
+    }
+  }, [categoriesList, subcategoriesList, productsList, variantsList]);
+
+  // Sincronizar URL cuando se abre o cierra un producto
+  const handleOpenProduct = (prod: Product, variant?: ProductVariant | null) => {
+    setSelectedProduct(prod);
+    setSelectedVariant(variant || null);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("producto", prod.slug || prod.id);
+      if (variant?.id) {
+        url.searchParams.set("variante", variant.id);
+      } else {
+        url.searchParams.delete("variante");
+      }
+      window.history.pushState(null, '', url.toString());
+    }
+  };
+
+  const handleCloseProduct = () => {
+    setSelectedProduct(null);
+    setSelectedVariant(null);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("producto");
+      url.searchParams.delete("variante");
+      const newQuery = url.searchParams.toString();
+      window.history.pushState(null, '', url.pathname + (newQuery ? '?' + newQuery : ''));
+    }
+  };
+
+  const handleCopyDirectLink = (e: React.MouseEvent, prod: Product, variant?: ProductVariant | null) => {
+    e.stopPropagation();
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.origin);
+      url.searchParams.set("producto", prod.slug || prod.id);
+      if (variant?.id) {
+        url.searchParams.set("variante", variant.id);
+      }
+      navigator.clipboard.writeText(url.toString());
+      const linkKey = variant?.id ? `${prod.id}_${variant.id}` : prod.id;
+      setCopiedLink(linkKey);
+      setTimeout(() => setCopiedLink(null), 2500);
+    }
+  };
+
+  // Reset de páginas al cambiar filtros
+  const handleSelectCategory = (catId: string) => {
+    setActiveCategoryFilter(catId);
+    setActiveSubcategoryFilter("all");
+    setSubcategoriesPage(1);
+    setProductsPage(1);
+  };
+
+  const handleSelectSubcategory = (subId: string) => {
+    setActiveSubcategoryFilter(subId);
+    setProductsPage(1);
+  };
 
   // Formateo de precio según la moneda activa
   const formatPrice = (
@@ -836,9 +938,9 @@ export default function StorefrontClient({
                               onError={(e) => {
                                 (e.currentTarget as HTMLImageElement).style.display = "none";
                               }}
-                              className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
+                              className="absolute inset-0 w-full h-full object-contain p-2 group-hover:scale-105 transition-transform duration-500 ease-out"
                             />
-                            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/75 to-black/35 group-hover:via-black/60 transition-colors" />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/60 to-transparent pointer-events-none" />
                           </>
                         ) : (
                           <>
@@ -973,99 +1075,125 @@ export default function StorefrontClient({
           </div>
         </div>
 
-        {/* 1. MODO CUADRÍCULA DE CATEGORÍAS (4 COLUMNAS EN PC, 2 EN MÓVIL) */}
+        {/* 1. MODO CUADRÍCULA DE CATEGORÍAS (4 POR VISTA) */}
         {activeCategoryFilter === "all" && catalogViewMode === "categories" ? (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5 sm:gap-4.5">
-            {categoriesList.map((cat) => {
-              const stats = categoryStats[cat.id] || { prodsCount: 0, minPrice: null };
+          <div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5 sm:gap-4.5">
+              {categoriesList.slice((categoriesPage - 1) * 4, categoriesPage * 4).map((cat) => {
+                const stats = categoryStats[cat.id] || { prodsCount: 0, minPrice: null };
 
-              return (
-                <div
-                  key={cat.id}
-                  onClick={() => {
-                    setActiveCategoryFilter(cat.id);
-                    setActiveSubcategoryFilter("all");
-                  }}
-                  className="rounded-3xl bg-[#10121A]/85 border border-white/10 hover:border-amber-500/40 transition-all duration-300 hover:scale-[1.02] cursor-pointer shadow-xl p-4 sm:p-5 flex flex-col justify-between h-44 sm:h-48 group relative backdrop-blur-md"
-                >
-                  {/* Fila Superior: Badge CATEGORÍA + Badge Contador */}
-                  <div className="flex items-center justify-between gap-1">
-                    <span className="px-2 py-0.5 rounded-full bg-black/70 border border-white/10 text-white text-[10px] font-mono uppercase tracking-wider">
-                      ✦ CATEGORÍA
-                    </span>
-                    <span className="px-2 py-0.5 rounded-full bg-[#FF007F] text-white text-[10px] font-mono font-bold">
-                      {stats.prodsCount} {stats.prodsCount === 1 ? "Producto" : "Productos"}
-                    </span>
+                return (
+                  <div
+                    key={cat.id}
+                    onClick={() => handleSelectCategory(cat.id)}
+                    className="rounded-3xl bg-[#10121A]/85 border border-white/10 hover:border-amber-500/40 transition-all duration-300 hover:scale-[1.02] cursor-pointer shadow-xl p-4 sm:p-5 flex flex-col justify-between h-44 sm:h-48 group relative backdrop-blur-md"
+                  >
+                    {/* Fila Superior: Badge CATEGORÍA + Badge Contador */}
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="px-2 py-0.5 rounded-full bg-black/70 border border-white/10 text-white text-[10px] font-mono uppercase tracking-wider">
+                        ✦ CATEGORÍA
+                      </span>
+                      <span className="px-2 py-0.5 rounded-full bg-[#FF007F] text-white text-[10px] font-mono font-bold">
+                        {stats.prodsCount} {stats.prodsCount === 1 ? "Producto" : "Productos"}
+                      </span>
+                    </div>
+
+                    {/* Centro de la Tarjeta: Imagen configurada en Admin o Icono */}
+                    <div className="my-auto flex items-center justify-center">
+                      {cat.imagen_url ? (
+                        <div className="w-16 h-16 rounded-2xl overflow-hidden border border-white/15 group-hover:scale-110 group-hover:border-[#FF007F]/60 transition-all duration-300 shadow-xl bg-black/60 flex items-center justify-center p-1.5 relative">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={cat.imagen_url}
+                            alt={cat.nombre}
+                            loading="lazy"
+                            decoding="async"
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).style.display = "none";
+                            }}
+                            className="w-full h-full object-contain"
+                          />
+                        </div>
+                      ) : (
+                        <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center group-hover:scale-110 group-hover:border-[#FF007F]/40 transition-all duration-300 shadow-inner">
+                          {getCategoryIconComponent(cat.nombre)}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Pie de la Tarjeta: Nombre de la Categoría y Cantidad */}
+                    <div className="text-center pt-2">
+                      <h3 className="text-base font-black text-white group-hover:text-[#FFF01F] transition-colors leading-tight">
+                        {cat.nombre}
+                      </h3>
+                      <p className="text-[11px] text-zinc-400 font-mono mt-0.5">
+                        {stats.prodsCount} {stats.prodsCount === 1 ? "Producto" : "Productos"}
+                      </p>
+                    </div>
                   </div>
+                );
+              })}
 
-                  {/* Centro de la Tarjeta: Imagen configurada en Admin o Icono */}
-                  <div className="my-auto flex items-center justify-center">
-                    {cat.imagen_url ? (
-                      <div className="w-16 h-16 rounded-2xl overflow-hidden border border-white/15 group-hover:scale-110 group-hover:border-[#FF007F]/60 transition-all duration-300 shadow-xl bg-black/40 relative">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={cat.imagen_url}
-                          alt={cat.nombre}
-                          loading="lazy"
-                          decoding="async"
-                          onError={(e) => {
-                            (e.currentTarget as HTMLImageElement).style.display = "none";
-                          }}
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                    ) : (
-                      <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center group-hover:scale-110 group-hover:border-[#FF007F]/40 transition-all duration-300 shadow-inner">
-                        {getCategoryIconComponent(cat.nombre)}
-                      </div>
-                    )}
-                  </div>
+              {/* Tarjeta de "Todos los Productos" cuando estemos en la página final o si hay pocas categorías */}
+              <div
+                onClick={() => {
+                  setCatalogViewMode("all_products");
+                  setActiveCategoryFilter("all");
+                  setActiveSubcategoryFilter("all");
+                  setProductsPage(1);
+                }}
+                className="rounded-3xl bg-[#10121A]/85 border border-white/10 hover:border-[#FFF01F]/50 transition-all duration-300 hover:scale-[1.02] cursor-pointer shadow-xl p-4 sm:p-5 flex flex-col justify-between h-44 sm:h-48 group relative backdrop-blur-md"
+              >
+                <div className="flex items-center justify-between gap-1">
+                  <span className="px-2 py-0.5 rounded-full bg-black/70 border border-white/10 text-white text-[10px] font-mono uppercase tracking-wider">
+                    ✦ CATÁLOGO
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full bg-[#FFF01F] text-black text-[10px] font-mono font-bold">
+                    {productsList.length} Total
+                  </span>
+                </div>
 
-                  {/* Pie de la Tarjeta: Nombre de la Categoría y Cantidad */}
-                  <div className="text-center pt-2">
-                    <h3 className="text-base font-black text-white group-hover:text-[#FFF01F] transition-colors leading-tight">
-                      {cat.nombre}
-                    </h3>
-                    <p className="text-[11px] text-zinc-400 font-mono mt-0.5">
-                      {stats.prodsCount} {stats.prodsCount === 1 ? "Producto" : "Productos"}
-                    </p>
+                <div className="my-auto flex items-center justify-center">
+                  <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center group-hover:scale-110 group-hover:border-[#FFF01F]/40 transition-all duration-300 shadow-inner">
+                    <ListFilter className="w-8 h-8 text-[#FFF01F]" />
                   </div>
                 </div>
-              );
-            })}
 
-            {/* Tarjeta de "Todos los Productos" para completar las 4 columnas */}
-            <div
-              onClick={() => {
-                setCatalogViewMode("all_products");
-                setActiveCategoryFilter("all");
-              }}
-              className="rounded-3xl bg-[#10121A]/85 border border-white/10 hover:border-[#FFF01F]/50 transition-all duration-300 hover:scale-[1.02] cursor-pointer shadow-xl p-4 sm:p-5 flex flex-col justify-between h-44 sm:h-48 group relative backdrop-blur-md"
-            >
-              <div className="flex items-center justify-between gap-1">
-                <span className="px-2 py-0.5 rounded-full bg-black/70 border border-white/10 text-white text-[10px] font-mono uppercase tracking-wider">
-                  ✦ CATÁLOGO
-                </span>
-                <span className="px-2 py-0.5 rounded-full bg-[#FFF01F] text-black text-[10px] font-mono font-bold">
-                  {productsList.length} Total
-                </span>
-              </div>
-
-              <div className="my-auto flex items-center justify-center">
-                <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center group-hover:scale-110 group-hover:border-[#FFF01F]/40 transition-all duration-300 shadow-inner">
-                  <ListFilter className="w-8 h-8 text-[#FFF01F]" />
+                <div className="text-center pt-2">
+                  <h3 className="text-base font-black text-white group-hover:text-[#FFF01F] transition-colors leading-tight">
+                    Todos
+                  </h3>
+                  <p className="text-[11px] text-zinc-400 font-mono mt-0.5">
+                    Ver Todo ({productsList.length})
+                  </p>
                 </div>
-              </div>
-
-              <div className="text-center pt-2">
-                <h3 className="text-base font-black text-white group-hover:text-[#FFF01F] transition-colors leading-tight">
-                  Todos
-                </h3>
-                <p className="text-[11px] text-zinc-400 font-mono mt-0.5">
-                  Ver Todo ({productsList.length})
-                </p>
               </div>
             </div>
+
+            {/* Paginación de Categorías 4 en 4 */}
+            {categoriesList.length > 4 && (
+              <div className="flex items-center justify-center gap-2 mt-6 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setCategoriesPage(p => Math.max(1, p - 1))}
+                  disabled={categoriesPage <= 1}
+                  className="px-4 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-xs font-bold disabled:opacity-30 disabled:cursor-not-allowed transition"
+                >
+                  ← Anterior
+                </button>
+                <span className="text-xs font-mono text-zinc-400 font-bold px-2">
+                  Página {categoriesPage} de {Math.max(1, Math.ceil(categoriesList.length / 4))}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setCategoriesPage(p => Math.min(Math.max(1, Math.ceil(categoriesList.length / 4)), p + 1))}
+                  disabled={categoriesPage >= Math.ceil(categoriesList.length / 4)}
+                  className="px-4 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-xs font-bold disabled:opacity-30 disabled:cursor-not-allowed transition"
+                >
+                  Siguiente →
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           /* 2. MODO VISTA DE PRODUCTOS (CUANDO SE HACE CLIC EN UNA CATEGORÍA O TODOS) */
@@ -1095,49 +1223,78 @@ export default function StorefrontClient({
               </div>
             </div>
 
-            {/* Subcategorías disponibles */}
+            {/* Subcategorías disponibles (Paginadas de 8 en 8) */}
             {availableSubcategories.length > 0 && (
-              <div className="flex flex-wrap items-center gap-2 p-3 rounded-2xl bg-black/40 border border-white/10">
-                <span className="text-xs font-mono text-[#FFF01F] font-bold uppercase mr-1 flex items-center gap-1">
-                  <Tag className="w-3.5 h-3.5" /> Subcategorías:
-                </span>
-                <button
-                  onClick={() => setActiveSubcategoryFilter("all")}
-                  className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition ${
-                    activeSubcategoryFilter === "all"
-                      ? "bg-[#FF007F] text-white shadow font-black"
-                      : "bg-white/10 hover:bg-white/20 text-white/80"
-                  }`}
-                >
-                  Todas
-                </button>
-
-                {availableSubcategories.map((sub) => (
+              <div className="space-y-2 p-3 rounded-2xl bg-black/40 border border-white/10">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-mono text-[#FFF01F] font-bold uppercase mr-1 flex items-center gap-1">
+                    <Tag className="w-3.5 h-3.5" /> Subcategorías:
+                  </span>
                   <button
-                    key={sub.id}
-                    onClick={() => setActiveSubcategoryFilter(sub.id)}
-                    className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition flex items-center gap-1.5 ${
-                      activeSubcategoryFilter === sub.id
+                    onClick={() => handleSelectSubcategory("all")}
+                    className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition ${
+                      activeSubcategoryFilter === "all"
                         ? "bg-[#FF007F] text-white shadow font-black"
                         : "bg-white/10 hover:bg-white/20 text-white/80"
                     }`}
                   >
-                    {sub.imagen_url && (
-                      /* eslint-disable-next-line @next/next/no-img-element */
-                      <img 
-                        src={sub.imagen_url} 
-                        alt="" 
-                        className="w-4 h-4 rounded-full object-cover shrink-0" 
-                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
-                      />
-                    )}
-                    <span>{sub.nombre}</span>
+                    Todas
                   </button>
-                ))}
+
+                  {availableSubcategories.slice((subcategoriesPage - 1) * 8, subcategoriesPage * 8).map((sub) => (
+                    <button
+                      key={sub.id}
+                      onClick={() => handleSelectSubcategory(sub.id)}
+                      className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition flex items-center gap-1.5 ${
+                        activeSubcategoryFilter === sub.id
+                          ? "bg-[#FF007F] text-white shadow font-black"
+                          : "bg-white/10 hover:bg-white/20 text-white/80"
+                      }`}
+                    >
+                      {sub.imagen_url && (
+                        <div className="w-4 h-4 rounded-full overflow-hidden bg-black/60 flex items-center justify-center shrink-0 border border-white/10">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img 
+                            src={sub.imagen_url} 
+                            alt="" 
+                            className="w-full h-full object-contain p-0.5" 
+                            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                          />
+                        </div>
+                      )}
+                      <span>{sub.nombre}</span>
+                    </button>
+                  ))}
+                </div>
+
+                {/* Controles de Paginación de Subcategorías (8 en 8) */}
+                {availableSubcategories.length > 8 && (
+                  <div className="flex items-center justify-end gap-2 pt-1 border-t border-white/5">
+                    <button
+                      type="button"
+                      onClick={() => setSubcategoriesPage(p => Math.max(1, p - 1))}
+                      disabled={subcategoriesPage <= 1}
+                      className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-[11px] font-bold disabled:opacity-30 disabled:cursor-not-allowed transition"
+                    >
+                      ← Anterior
+                    </button>
+                    <span className="text-[11px] font-mono text-zinc-400">
+                      {subcategoriesPage} / {Math.max(1, Math.ceil(availableSubcategories.length / 8))}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setSubcategoriesPage(p => Math.min(Math.max(1, Math.ceil(availableSubcategories.length / 8)), p + 1))}
+                      disabled={subcategoriesPage >= Math.ceil(availableSubcategories.length / 8)}
+                      className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-[11px] font-bold disabled:opacity-30 disabled:cursor-not-allowed transition"
+                    >
+                      Siguiente →
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
-            {/* Cuadrícula de Productos */}
+            {/* Cuadrícula de Productos (Paginados de 10 en 10) */}
             {filteredProducts.length === 0 ? (
               <div className="rounded-3xl p-10 text-center max-w-md mx-auto space-y-3 bg-[#0B0D13]/80 border border-white/15">
                 <PackageOpen className="w-10 h-10 text-[#FFF01F] mx-auto" />
@@ -1154,102 +1311,174 @@ export default function StorefrontClient({
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {filteredProducts.map((prod) => {
-                  const prodVariants = variantsList.filter((v) => v.producto_id === prod.id && v.activo !== false);
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                  {filteredProducts.slice((productsPage - 1) * 10, productsPage * 10).map((prod) => {
+                    const prodVariants = variantsList.filter((v) => v.producto_id === prod.id && v.activo !== false);
 
-                  return (
-                    <div 
-                      key={prod.id} 
-                      className="rounded-2xl p-4.5 bg-[#141620]/90 border border-white/15 hover:border-[#FFF01F] transition-all flex flex-col justify-between group shadow-xl"
-                    >
-                      <div>
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="px-2 py-0.5 rounded-md bg-white/10 text-[10px] font-mono text-zinc-300">
-                            {prod.categoria_nombre || "General"}
-                          </span>
-                          {prod.oferta_especial && (
-                            <span className="px-2 py-0.5 rounded-full bg-[#FF007F] text-white text-[10px] font-black uppercase tracking-wider">
-                              OFERTA
+                    return (
+                      <div 
+                        key={prod.id} 
+                        className="rounded-2xl p-4.5 bg-[#141620]/90 border border-white/15 hover:border-[#FFF01F] transition-all flex flex-col justify-between group shadow-xl"
+                      >
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="px-2 py-0.5 rounded-md bg-white/10 text-[10px] font-mono text-zinc-300">
+                              {prod.categoria_nombre || "General"}
                             </span>
-                          )}
-                        </div>
-
-                        <div className="flex items-start gap-3">
-                          {prod.imagen_url ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img 
-                              src={prod.imagen_url} 
-                              alt={prod.nombre} 
-                              loading="lazy"
-                              decoding="async"
-                              className="w-14 h-14 rounded-xl object-cover border border-white/10 shrink-0" 
-                            />
-                          ) : (
-                            <div className="w-14 h-14 rounded-xl bg-gradient-to-tr from-[#D61A1A] to-[#FFF01F] flex items-center justify-center text-black font-black text-lg shadow shrink-0">
-                              ⚡
-                            </div>
-                          )}
-
-                          <div className="min-w-0 flex-1">
-                            <h4 className="text-base font-bold text-white group-hover:text-[#FFF01F] transition-colors leading-tight">
-                              {prod.nombre}
-                            </h4>
-                            {prod.descripcion && (
-                              <p className="text-xs text-zinc-400 mt-1 line-clamp-2 leading-relaxed">
-                                {prod.descripcion}
-                              </p>
+                            {prod.oferta_especial && (
+                              <span className="px-2 py-0.5 rounded-full bg-[#FF007F] text-white text-[10px] font-black uppercase tracking-wider">
+                                OFERTA
+                              </span>
                             )}
                           </div>
-                        </div>
 
-                        {/* Variantes del Producto */}
-                        {prodVariants.length > 0 && (
-                          <div className="mt-3 pt-2.5 border-t border-white/10 space-y-1.5">
-                            <span className="text-[10px] font-mono uppercase text-[#FFF01F] font-bold block">
-                              Opciones ({prodVariants.length}):
-                            </span>
-                            <div className="space-y-1 max-h-36 overflow-y-auto pr-1">
-                              {prodVariants.map((v) => (
-                                <div 
-                                  key={v.id}
-                                  className="p-1.5 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-between text-xs transition"
-                                >
-                                  <span className="truncate pr-1 font-medium">{v.nombre}</span>
-                                  <span className="font-mono text-[#FFF01F] font-bold shrink-0">
-                                    {formatPrice(v.precio_base, v)}
-                                  </span>
-                                </div>
-                              ))}
+                          <div className="flex items-start gap-3">
+                            {prod.imagen_url ? (
+                              <div className="w-16 h-16 rounded-2xl bg-black/60 border border-white/10 overflow-hidden flex items-center justify-center p-1 shrink-0">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img 
+                                  src={prod.imagen_url} 
+                                  alt={prod.nombre} 
+                                  loading="lazy"
+                                  decoding="async"
+                                  className="w-full h-full object-contain group-hover:scale-105 transition-transform" 
+                                />
+                              </div>
+                            ) : (
+                              <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-[#D61A1A] to-[#FFF01F] flex items-center justify-center text-black font-black text-lg shadow shrink-0">
+                                ⚡
+                              </div>
+                            )}
+
+                            <div className="min-w-0 flex-1">
+                              <h4 className="text-base font-bold text-white group-hover:text-[#FFF01F] transition-colors leading-tight">
+                                {prod.nombre}
+                              </h4>
+                              {prod.descripcion && (
+                                <p className="text-xs text-zinc-400 mt-1 line-clamp-2 leading-relaxed">
+                                  {prod.descripcion}
+                                </p>
+                              )}
                             </div>
                           </div>
-                        )}
-                      </div>
 
-                      <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between">
-                        <div>
-                          <span className="text-[10px] text-zinc-400 uppercase font-mono block">
-                            Precio
-                          </span>
-                          <span className="text-base font-black text-[#FFF01F] font-mono">
-                            {formatPrice(prod.precio_base, prod)}
-                          </span>
+                          {/* Variantes / Subproductos con Enlaces Directos Propios */}
+                          {prodVariants.length > 0 && (
+                            <div className="mt-3 pt-2.5 border-t border-white/10 space-y-1.5">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-mono uppercase text-[#FFF01F] font-bold block">
+                                  Opciones ({prodVariants.length}):
+                                </span>
+                                <span className="text-[9px] text-zinc-500 font-mono">Toca para comprar</span>
+                              </div>
+                              <div className="space-y-1 max-h-36 overflow-y-auto pr-1">
+                                {prodVariants.map((v) => (
+                                  <div 
+                                    key={v.id}
+                                    onClick={() => handleOpenProduct(prod, v)}
+                                    className="p-1.5 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-between text-xs transition cursor-pointer group/var"
+                                  >
+                                    <div className="flex items-center gap-1.5 min-w-0 pr-1">
+                                      {v.imagen_url ? (
+                                        <div className="w-5 h-5 rounded overflow-hidden bg-black/60 flex items-center justify-center shrink-0 border border-white/10">
+                                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                                          <img src={v.imagen_url} alt="" className="w-full h-full object-contain p-0.5" />
+                                        </div>
+                                      ) : null}
+                                      <span className="truncate font-medium group-hover/var:text-[#FFF01F] transition-colors">{v.nombre}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 shrink-0">
+                                      <span className="font-mono text-[#FFF01F] font-bold">
+                                        {formatPrice(v.precio_base, v)}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => handleCopyDirectLink(e, prod, v)}
+                                        className="p-1 rounded-md text-zinc-400 hover:text-white hover:bg-white/10 transition"
+                                        title="Copiar link directo a este subproducto"
+                                      >
+                                        {copiedLink === `${prod.id}_${v.id}` ? (
+                                          <Check className="w-3.5 h-3.5 text-emerald-400" />
+                                        ) : (
+                                          <Copy className="w-3.5 h-3.5" />
+                                        )}
+                                      </button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
 
-                        <button
-                          onClick={() => {
-                            setSelectedProduct(prod);
-                            setSelectedVariant(prodVariants.length > 0 ? prodVariants[0] : null);
-                          }}
-                          className="px-4 py-2 rounded-full bg-white text-black font-bold text-xs hover:bg-[#FFF01F] transition flex items-center gap-1 shadow"
-                        >
-                          <span>Comprar</span>
-                          <ChevronRight className="w-3.5 h-3.5 text-black" />
-                        </button>
+                        <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between gap-2">
+                          <div>
+                            <span className="text-[10px] text-zinc-400 uppercase font-mono block">
+                              Precio
+                            </span>
+                            <span className="text-base font-black text-[#FFF01F] font-mono">
+                              {formatPrice(prod.precio_base, prod)}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={(e) => handleCopyDirectLink(e, prod, null)}
+                              className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-zinc-300 hover:text-white transition"
+                              title="Copiar enlace directo de este producto"
+                            >
+                              {copiedLink === prod.id ? (
+                                <Check className="w-3.5 h-3.5 text-emerald-400" />
+                              ) : (
+                                <Copy className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+
+                            <button
+                              onClick={() => handleOpenProduct(prod, prodVariants.length > 0 ? prodVariants[0] : null)}
+                              className="px-4 py-2 rounded-full bg-white text-black font-bold text-xs hover:bg-[#FFF01F] transition flex items-center gap-1 shadow"
+                            >
+                              <span>Comprar</span>
+                              <ChevronRight className="w-3.5 h-3.5 text-black" />
+                            </button>
+                          </div>
+                        </div>
                       </div>
+                    );
+                  })}
+                </div>
+
+                {/* Controles de Paginación 10 en 10 para Productos */}
+                {filteredProducts.length > 10 && (
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 rounded-2xl bg-[#0B0D13]/85 border border-white/15 text-xs">
+                    <span className="text-zinc-400 font-mono">
+                      Mostrando <strong className="text-white">{(productsPage - 1) * 10 + 1}</strong> - <strong className="text-white">{Math.min(productsPage * 10, filteredProducts.length)}</strong> de <strong className="text-[#FFF01F]">{filteredProducts.length}</strong> productos
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setProductsPage(p => Math.max(1, p - 1))}
+                        disabled={productsPage <= 1}
+                        className="px-4 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-xs font-bold disabled:opacity-30 disabled:cursor-not-allowed transition"
+                      >
+                        ← Anterior
+                      </button>
+                      <span className="text-xs font-mono text-zinc-300 font-bold px-2">
+                        Página {productsPage} de {Math.max(1, Math.ceil(filteredProducts.length / 10))}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setProductsPage(p => Math.min(Math.max(1, Math.ceil(filteredProducts.length / 10)), p + 1))}
+                        disabled={productsPage >= Math.ceil(filteredProducts.length / 10)}
+                        className="px-4 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-xs font-bold disabled:opacity-30 disabled:cursor-not-allowed transition"
+                      >
+                        Siguiente →
+                      </button>
                     </div>
-                  );
-                })}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1257,7 +1486,7 @@ export default function StorefrontClient({
       </section>
 
       {/* ========================================================================= */}
-      {/* 4. MODAL DE CHECKOUT & PAGO                                               */}
+      {/* 4. MODAL DE CHECKOUT & PAGO (SINCRONIZADO CON URL)                         */}
       {/* ========================================================================= */}
       {selectedProduct && (
         <CheckoutModal
@@ -1270,10 +1499,7 @@ export default function StorefrontClient({
           tasaMxn={tasaMxn}
           defaultCurrency={currentCurrency}
           currentUser={currentUser}
-          onClose={() => {
-            setSelectedProduct(null);
-            setSelectedVariant(null);
-          }}
+          onClose={handleCloseProduct}
         />
       )}
 

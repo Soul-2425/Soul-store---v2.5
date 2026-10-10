@@ -357,6 +357,17 @@ function RankPricingSection({
 
 export default function AdminDashboardPage() {
   const [activeTab, setActiveTab] = useState<"pedidos" | "catalogo" | "pagos" | "finanzas" | "usuarios" | "tasas" | "boveda" | "notificaciones">("pedidos");
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [ordersPage, setOrdersPage] = useState(1);
+  const [usersPage, setUsersPage] = useState(1);
+
+  const handleNavigateTab = (tab: "pedidos" | "catalogo" | "pagos" | "finanzas" | "usuarios" | "tasas" | "boveda" | "notificaciones") => {
+    setActiveTab(tab);
+    setMobileNavOpen(false);
+    if (typeof window !== "undefined") {
+      window.history.pushState(null, '', `?tab=${tab}`);
+    }
+  };
 
   // Control de Acceso Exclusivo para Administradores
   const [authChecking, setAuthChecking] = useState(true);
@@ -1489,7 +1500,8 @@ export default function AdminDashboardPage() {
     if (typeof window !== "undefined") {
       const urlParams = new URLSearchParams(window.location.search);
       const tabParam = urlParams.get("tab");
-      if (tabParam === "pedidos" || tabParam === "notificaciones" || tabParam === "catalogo") {
+      const validTabs = ["pedidos", "catalogo", "pagos", "finanzas", "usuarios", "tasas", "boveda", "notificaciones"];
+      if (tabParam && validTabs.includes(tabParam)) {
         setActiveTab(tabParam as any);
       }
       const orderIdParam = urlParams.get("order_id");
@@ -2220,23 +2232,24 @@ export default function AdminDashboardPage() {
 
   return (
     <div className="min-h-screen bg-[#09090e] text-slate-100 flex flex-col">
-      {/* Top Navbar Admin */}
-      <header className="glass-panel border-b border-slate-800/90 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Link href="/" className="flex items-center gap-2">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-fuchsia-600 to-pink-500 p-0.5 shadow-glow">
+      {/* Top Navbar Admin - Fijo e Independiente */}
+      <header className="bg-[#0B0D13]/95 backdrop-blur-md border-b border-slate-800/90 sticky top-0 z-50 shadow-lg">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 h-14 sm:h-16 flex items-center justify-between gap-2">
+          {/* Lado Izquierdo: Brand e Indicador */}
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            <Link href="/" className="flex items-center gap-2 group">
+              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-tr from-fuchsia-600 to-pink-500 p-0.5 shadow-glow group-hover:scale-105 transition-transform">
                 <div className="w-full h-full bg-[#0d0d14] rounded-[10px] flex items-center justify-center">
                   <Flame className="w-4 h-4 text-fuchsia-400" />
                 </div>
               </div>
-              <span className="font-extrabold text-white text-lg tracking-wider">
+              <span className="font-extrabold text-white text-base sm:text-lg tracking-wider">
                 SOUL<span className="text-pink-400">ADMIN</span>
               </span>
             </Link>
 
-            {/* Simulación "Ver como..." (Módulo 6.1) */}
-            <div className="hidden lg:flex items-center gap-2 ml-6 px-3 py-1 bg-slate-900 border border-slate-800 rounded-xl text-xs">
+            {/* Simulación "Ver como..." (Visible en pantallas medianas y grandes) */}
+            <div className="hidden lg:flex items-center gap-2 ml-4 px-3 py-1 bg-slate-900 border border-slate-800 rounded-xl text-xs">
               <Eye className="w-3.5 h-3.5 text-fuchsia-400" />
               <span className="text-slate-400">Simular Rol:</span>
               <select 
@@ -2245,7 +2258,7 @@ export default function AdminDashboardPage() {
                   const val = e.target.value;
                   setViewAsRole(val);
                   if (val === "disenador") {
-                    setActiveTab("catalogo");
+                    handleNavigateTab("catalogo");
                   }
                 }}
                 className="bg-transparent text-white font-mono font-semibold outline-none cursor-pointer"
@@ -2266,58 +2279,58 @@ export default function AdminDashboardPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 sm:gap-3 text-sm">
-            {/* Control de Notificaciones Push de Pedidos */}
-            <div className="flex items-center gap-1.5">
-              {pushSubscribed ? (
-                <div className="flex items-center gap-1.5">
-                  <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-bold">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                    <span>Alertas Push Activas</span>
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleTestPush}
-                    disabled={testingPush}
-                    className="px-2.5 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-200 text-xs font-mono font-bold transition flex items-center gap-1"
-                    title="Enviar notificación de prueba a este dispositivo"
-                  >
-                    {testingPush ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <span>🧪 Probar Alerta</span>}
-                  </button>
-                </div>
-              ) : (
+          {/* Lado Derecho: Controles compactos e inamovibles */}
+          <div className="flex items-center gap-1.5 sm:gap-2.5 text-xs shrink-0">
+            {/* Control Notificaciones Push */}
+            {pushSubscribed ? (
+              <div className="flex items-center gap-1">
+                <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-bold">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <span>Alertas Activas</span>
+                </span>
                 <button
                   type="button"
-                  onClick={handleEnablePush}
-                  disabled={subscribingPush}
-                  className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-[#FFF01F] to-amber-400 hover:from-yellow-300 hover:to-amber-300 text-slate-950 text-xs font-black transition flex items-center gap-1.5 shadow-[0_0_15px_rgba(255,240,31,0.35)]"
-                  title="Activa las alertas para recibir notificaciones cuando entre un pedido"
+                  onClick={handleTestPush}
+                  disabled={testingPush}
+                  className="p-1.5 sm:px-2.5 sm:py-1 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-200 text-xs font-mono font-bold transition flex items-center gap-1"
+                  title="Enviar notificación de prueba a este dispositivo"
                 >
-                  {subscribingPush ? (
+                  {testingPush ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : (
                     <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      <span>Activando...</span>
-                    </>
-                  ) : (
-                    <>
-                      <span>🔔</span>
-                      <span className="hidden sm:inline">Activar Alertas de Pedidos</span>
-                      <span className="sm:hidden">Alertas</span>
+                      <span className="text-sm sm:text-xs">🧪</span>
+                      <span className="hidden sm:inline">Probar Alerta</span>
                     </>
                   )}
                 </button>
-              )}
-            </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={handleEnablePush}
+                disabled={subscribingPush}
+                className="px-2.5 py-1 rounded-xl bg-gradient-to-r from-[#FFF01F] to-amber-400 text-slate-950 font-black text-xs transition flex items-center gap-1 shadow-[0_0_12px_rgba(255,240,31,0.35)]"
+                title="Activa las alertas para recibir notificaciones cuando entre un pedido"
+              >
+                {subscribingPush ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <span>🔔</span>}
+                <span className="hidden sm:inline">Alertas de Pedidos</span>
+              </button>
+            )}
 
+            {/* Link Tienda Pública */}
             <Link 
               href="/" 
-              className="text-xs text-slate-300 hover:text-white transition flex items-center gap-1.5 px-3 py-1.5 rounded-lg glass-panel hover:border-slate-600"
+              className="text-xs text-slate-300 hover:text-white transition flex items-center gap-1 p-1.5 sm:px-2.5 sm:py-1 rounded-lg glass-panel hover:border-slate-600"
+              title="Ir a la tienda pública"
             >
-              <span className="hidden sm:inline">Ver Tienda Pública</span>
-              <span className="sm:hidden">Tienda</span>
+              <span className="hidden sm:inline">Tienda</span>
               <ExternalLink className="w-3.5 h-3.5 text-fuchsia-400" />
             </Link>
-            <div className="w-8 h-8 rounded-full bg-gradient-to-r from-fuchsia-500 to-pink-500 flex items-center justify-center text-xs font-bold text-white shadow-glow">
+
+            {/* Badge de Rol */}
+            <div 
+              className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gradient-to-r from-fuchsia-500 to-pink-500 flex items-center justify-center text-[11px] sm:text-xs font-bold text-white shadow-glow"
+              title={isDesigner ? "Modo Diseñador" : "Administrador"}
+            >
               {isDesigner ? "DS" : "AD"}
             </div>
           </div>
@@ -2339,12 +2352,95 @@ export default function AdminDashboardPage() {
         </div>
       )}
 
-      {/* Tabs navigation */}
-      <div className="bg-black/40 border-b border-slate-800/80 px-4">
+      {/* ======================================================== */}
+      {/* NAVEGACIÓN MÓVIL: SELECTOR DROPDOWN CON FLECHA INDICADORA */}
+      {/* Muestra dónde estamos y despliega opciones sin desconexión*/}
+      {/* ======================================================== */}
+      <div className="md:hidden bg-[#0c0d14] border-b border-slate-800/90 px-3 py-2 sticky top-14 z-40 shadow-md">
+        {(() => {
+          const tabItems = [
+            { id: "pedidos", label: "Gestión de Pedidos & Despachos", icon: ShoppingBag, badge: orders.filter((o) => o.item_estado === "EN_COLA").length },
+            { id: "catalogo", label: "Gestor de Catálogo Dinámico", icon: Package },
+            { id: "finanzas", label: "Dashboard Financiero", icon: BarChart3 },
+            { id: "usuarios", label: "Gestor de Usuarios", icon: Users },
+            { id: "tasas", label: "Multidivisa & Suiche P2P", icon: DollarSign },
+            { id: "pagos", label: "Métodos de Pago", icon: CreditCard, badge: paymentMethods.filter(p => p.activo).length },
+            { id: "boveda", label: "Bóveda Segura", icon: ShieldCheck, badge: vaultItems.filter(i => i.estado === "OFERTA_ESPECIAL").length },
+            { id: "notificaciones", label: "Plantillas Notificaciones", icon: Bell },
+          ].filter(t => !isDesigner || t.id === "catalogo");
+
+          const currentTabItem = tabItems.find(t => t.id === activeTab) || tabItems[0];
+          const CurrentIcon = currentTabItem.icon;
+
+          return (
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setMobileNavOpen(prev => !prev)}
+                className="w-full flex items-center justify-between p-2.5 px-3.5 rounded-xl bg-slate-900/95 border border-fuchsia-500/40 text-white shadow-lg transition active:scale-[0.99]"
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <CurrentIcon className="w-4 h-4 text-fuchsia-400 shrink-0" />
+                  <span className="font-bold text-xs truncate text-white">{currentTabItem.label}</span>
+                  {currentTabItem.badge !== undefined && currentTabItem.badge > 0 && (
+                    <span className="px-1.5 py-0.2 rounded-full bg-pink-500 text-white font-mono text-[10px] animate-pulse shrink-0">
+                      {currentTabItem.badge}
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-1.5 pl-2 text-slate-400 shrink-0">
+                  <span className="text-[10px] font-mono text-fuchsia-300 font-bold uppercase">Secciones</span>
+                  <ChevronDown className={`w-4 h-4 text-fuchsia-400 transition-transform duration-200 ${mobileNavOpen ? "rotate-180" : ""}`} />
+                </div>
+              </button>
+
+              {/* Menú Desplegable Móvil */}
+              {mobileNavOpen && (
+                <div className="absolute top-full left-0 right-0 mt-1.5 rounded-2xl bg-[#0f101a] border border-slate-700/80 shadow-2xl p-1.5 space-y-1 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+                  {tabItems.map((tab) => {
+                    const TabIcon = tab.icon;
+                    const isSelected = activeTab === tab.id;
+                    return (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => handleNavigateTab(tab.id as any)}
+                        className={`w-full flex items-center justify-between p-2.5 rounded-xl text-xs font-bold transition text-left ${
+                          isSelected
+                            ? "bg-fuchsia-600 text-white shadow-glow"
+                            : "text-slate-300 hover:text-white hover:bg-slate-800/80"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <TabIcon className={`w-4 h-4 shrink-0 ${isSelected ? "text-white" : "text-slate-400"}`} />
+                          <span className="truncate">{tab.label}</span>
+                        </div>
+                        {tab.badge !== undefined && tab.badge > 0 && (
+                          <span className={`px-1.5 py-0.2 rounded-full font-mono text-[10px] ${
+                            isSelected ? "bg-white text-fuchsia-600 font-black" : "bg-pink-500 text-white"
+                          }`}>
+                            {tab.badge}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+      </div>
+
+      {/* ======================================================== */}
+      {/* NAVEGACIÓN ESCRITORIO: BARRA HORIZONTAL (DESKTOPS)        */}
+      {/* ======================================================== */}
+      <div className="hidden md:block bg-black/40 border-b border-slate-800/80 px-4">
         <div className="max-w-7xl mx-auto flex items-center gap-2 overflow-x-auto py-2">
           {!isDesigner && (
             <button
-              onClick={() => setActiveTab("pedidos")}
+              onClick={() => handleNavigateTab("pedidos")}
               className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
                 activeTab === "pedidos"
                   ? "bg-fuchsia-600 text-white shadow-glow"
@@ -2362,7 +2458,7 @@ export default function AdminDashboardPage() {
           )}
 
           <button
-            onClick={() => setActiveTab("catalogo")}
+            onClick={() => handleNavigateTab("catalogo")}
             className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
               activeTab === "catalogo"
                 ? "bg-fuchsia-600 text-white shadow-glow"
@@ -2376,7 +2472,7 @@ export default function AdminDashboardPage() {
           {!isDesigner && (
             <>
               <button
-                onClick={() => setActiveTab("finanzas")}
+                onClick={() => handleNavigateTab("finanzas")}
                 className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
                   activeTab === "finanzas"
                     ? "bg-fuchsia-600 text-white shadow-glow"
@@ -2388,7 +2484,7 @@ export default function AdminDashboardPage() {
               </button>
 
               <button
-                onClick={() => setActiveTab("usuarios")}
+                onClick={() => handleNavigateTab("usuarios")}
                 className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
                   activeTab === "usuarios"
                     ? "bg-fuchsia-600 text-white shadow-glow"
@@ -2400,7 +2496,7 @@ export default function AdminDashboardPage() {
               </button>
 
               <button
-                onClick={() => setActiveTab("tasas")}
+                onClick={() => handleNavigateTab("tasas")}
                 className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
                   activeTab === "tasas"
                     ? "bg-fuchsia-600 text-white shadow-glow"
@@ -2412,7 +2508,7 @@ export default function AdminDashboardPage() {
               </button>
 
               <button
-                onClick={() => setActiveTab("pagos")}
+                onClick={() => handleNavigateTab("pagos")}
                 className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
                   activeTab === "pagos"
                     ? "bg-fuchsia-600 text-white shadow-glow"
@@ -2429,7 +2525,7 @@ export default function AdminDashboardPage() {
               </button>
 
               <button
-                onClick={() => setActiveTab("boveda")}
+                onClick={() => handleNavigateTab("boveda")}
                 className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
                   activeTab === "boveda"
                     ? "bg-fuchsia-600 text-white shadow-glow"
@@ -2447,7 +2543,7 @@ export default function AdminDashboardPage() {
               </button>
 
               <button
-                onClick={() => setActiveTab("notificaciones")}
+                onClick={() => handleNavigateTab("notificaciones")}
                 className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
                   activeTab === "notificaciones"
                     ? "bg-fuchsia-600 text-white shadow-glow"
@@ -2604,7 +2700,7 @@ export default function AdminDashboardPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/60 font-medium text-xs">
-                      {orders.map((o) => {
+                      {orders.slice((ordersPage - 1) * 10, ordersPage * 10).map((o) => {
                         const isHighlighted = highlightOrderId && (o.id === highlightOrderId || o.id.toLowerCase().startsWith(highlightOrderId.toLowerCase()) || highlightOrderId.toUpperCase().includes(o.id.slice(0, 8).toUpperCase()));
                         return (
                         <tr 
@@ -2747,6 +2843,36 @@ export default function AdminDashboardPage() {
                     </tbody>
                   </table>
                 </div>
+
+                {/* Controles de Paginación 10 en 10 */}
+                {orders.length > 0 && (
+                  <div className="p-3.5 px-4 bg-slate-950/80 border-t border-slate-800/80 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+                    <div className="text-slate-400 font-mono">
+                      Mostrando <span className="font-bold text-white">{(ordersPage - 1) * 10 + 1}</span> a <span className="font-bold text-white">{Math.min(ordersPage * 10, orders.length)}</span> de <span className="font-bold text-fuchsia-400">{orders.length}</span> pedidos
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setOrdersPage(p => Math.max(1, p - 1))}
+                        disabled={ordersPage <= 1}
+                        className="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white font-bold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-800 transition"
+                      >
+                        ← Anterior
+                      </button>
+                      <span className="px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 font-mono font-bold text-white">
+                        {ordersPage} / {Math.max(1, Math.ceil(orders.length / 10))}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setOrdersPage(p => Math.min(Math.max(1, Math.ceil(orders.length / 10)), p + 1))}
+                        disabled={ordersPage >= Math.ceil(orders.length / 10)}
+                        className="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white font-bold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-800 transition"
+                      >
+                        Siguiente →
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -3159,7 +3285,7 @@ export default function AdminDashboardPage() {
                               <div className="w-14 h-14 rounded-2xl bg-black/60 border border-slate-800 overflow-hidden flex items-center justify-center shrink-0">
                                 {prod.imagen_url ? (
                                   /* eslint-disable-next-line @next/next/no-img-element */
-                                  <img src={prod.imagen_url} alt={prod.nombre} className="w-full h-full object-cover" />
+                                  <img src={prod.imagen_url} alt={prod.nombre} className="w-full h-full object-contain p-1" />
                                 ) : (
                                   <div className="w-full h-full bg-gradient-to-tr from-fuchsia-600 to-pink-600 flex items-center justify-center text-white font-black text-base">
                                     ⚡
@@ -3501,7 +3627,7 @@ export default function AdminDashboardPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/60 font-medium text-xs">
-                      {users.map((u) => (
+                      {users.slice((usersPage - 1) * 10, usersPage * 10).map((u) => (
                         <tr key={u.id} className="hover:bg-slate-900/40">
                           <td className="py-3.5 px-4 font-bold text-white">
                             {u.nombre} {u.apellido || ""}
@@ -3553,6 +3679,36 @@ export default function AdminDashboardPage() {
                     </tbody>
                   </table>
                 </div>
+
+                {/* Controles de Paginación 10 en 10 */}
+                {users.length > 0 && (
+                  <div className="p-3.5 px-4 bg-slate-950/80 border-t border-slate-800/80 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+                    <div className="text-slate-400 font-mono">
+                      Mostrando <span className="font-bold text-white">{(usersPage - 1) * 10 + 1}</span> a <span className="font-bold text-white">{Math.min(usersPage * 10, users.length)}</span> de <span className="font-bold text-cyan-400">{users.length}</span> usuarios
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setUsersPage(p => Math.max(1, p - 1))}
+                        disabled={usersPage <= 1}
+                        className="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white font-bold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-800 transition"
+                      >
+                        ← Anterior
+                      </button>
+                      <span className="px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 font-mono font-bold text-white">
+                        {usersPage} / {Math.max(1, Math.ceil(users.length / 10))}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setUsersPage(p => Math.min(Math.max(1, Math.ceil(users.length / 10)), p + 1))}
+                        disabled={usersPage >= Math.ceil(users.length / 10)}
+                        className="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white font-bold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-800 transition"
+                      >
+                        Siguiente →
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

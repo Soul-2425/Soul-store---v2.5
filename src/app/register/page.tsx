@@ -14,6 +14,7 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [telefonoWhatsapp, setTelefonoWhatsapp] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
@@ -24,8 +25,14 @@ export default function RegisterPage() {
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
     setErrorMsg(null);
+
+    if (password !== confirmPassword) {
+      setErrorMsg("Las contraseñas no coinciden. Por favor verifícalas.");
+      return;
+    }
+
+    setLoading(true);
 
     try {
       const { data, error } = await supabase.auth.signUp({
@@ -252,6 +259,35 @@ export default function RegisterPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Mínimo 6 caracteres"
                 className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-slate-900/80 border border-slate-700/80 focus:border-fuchsia-500 text-sm text-white placeholder-slate-500 outline-none"
+              />
+            </div>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-mono text-slate-300">REPETIR CONTRASEÑA *</label>
+              {confirmPassword.length > 0 && (
+                <span className={`text-[10px] font-mono font-bold ${password === confirmPassword ? "text-emerald-400" : "text-amber-400"}`}>
+                  {password === confirmPassword ? "✓ Coinciden" : "✕ No coinciden"}
+                </span>
+              )}
+            </div>
+            <div className="relative">
+              <Lock className="w-4 h-4 absolute left-3 top-3 text-slate-500" />
+              <input
+                type="password"
+                required
+                minLength={6}
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Repite tu contraseña exactamente"
+                className={`w-full pl-9 pr-4 py-2.5 rounded-xl bg-slate-900/80 border text-sm text-white placeholder-slate-500 outline-none transition ${
+                  confirmPassword.length > 0 && password !== confirmPassword
+                    ? "border-amber-500/80 focus:border-amber-500"
+                    : confirmPassword.length > 0 && password === confirmPassword
+                    ? "border-emerald-500/80 focus:border-emerald-500"
+                    : "border-slate-700/80 focus:border-fuchsia-500"
+                }`}
               />
             </div>
           </div>
