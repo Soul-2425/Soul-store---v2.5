@@ -28,7 +28,8 @@ import {
   Gamepad2,
   Gift,
   ListFilter,
-  Copy
+  Copy,
+  ArrowRight
 } from "lucide-react";
 import CheckoutModal from "@/components/CheckoutModal";
 import { createClient } from "@/lib/supabase/client";
@@ -242,7 +243,7 @@ export default function StorefrontClient({
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(null);
   const [activeCategoryFilter, setActiveCategoryFilter] = useState<string>("all");
-  const [activeSubcategoryFilter, setActiveSubcategoryFilter] = useState<string>("all");
+  const [activeSubcategoryFilter, setActiveSubcategoryFilter] = useState<string | null>(null);
   const [catalogViewMode, setCatalogViewMode] = useState<"categories" | "all_products">("categories");
   const [currentCurrency, setCurrentCurrency] = useState<Currency>("USD");
   const [currencyDropdownOpen, setCurrencyDropdownOpen] = useState(false);
@@ -359,13 +360,23 @@ export default function StorefrontClient({
         if (foundCat) {
           setActiveCategoryFilter(foundCat.id);
           setCatalogViewMode("categories");
+          if (subParam) {
+            const foundSub = subcategoriesList.find(s => s.slug === subParam || s.id === subParam);
+            if (foundSub) {
+              setActiveSubcategoryFilter(foundSub.id);
+            } else {
+              setActiveSubcategoryFilter("all");
+            }
+          } else {
+            setActiveSubcategoryFilter(null);
+          }
         }
-      }
-
-      if (subParam) {
+      } else if (subParam) {
         const foundSub = subcategoriesList.find(s => s.slug === subParam || s.id === subParam);
         if (foundSub) {
+          setActiveCategoryFilter(foundSub.categoria_id);
           setActiveSubcategoryFilter(foundSub.id);
+          setCatalogViewMode("categories");
         }
       }
 
@@ -427,17 +438,34 @@ export default function StorefrontClient({
     }
   };
 
-  // Reset de páginas al cambiar filtros
+  // Reset de páginas y navegación jerárquica del catálogo
   const handleSelectCategory = (catId: string) => {
     setActiveCategoryFilter(catId);
-    setActiveSubcategoryFilter("all");
+    const subcats = subcategoriesList.filter((s) => s.categoria_id === catId);
+    if (subcats.length > 0) {
+      setActiveSubcategoryFilter(null); // Abre la vista de Subcategorías (Nivel 2)
+    } else {
+      setActiveSubcategoryFilter("all"); // Si no tiene subcategorías, muestra los productos directamente
+    }
     setSubcategoriesPage(1);
     setProductsPage(1);
   };
 
   const handleSelectSubcategory = (subId: string) => {
-    setActiveSubcategoryFilter(subId);
+    setActiveSubcategoryFilter(subId); // Entra a ver los productos de la subcategoría (Nivel 3)
     setProductsPage(1);
+  };
+
+  const handleBackToSubcategories = () => {
+    setActiveSubcategoryFilter(null);
+    setSubcategoriesPage(1);
+  };
+
+  const handleBackToCategories = () => {
+    setActiveCategoryFilter("all");
+    setActiveSubcategoryFilter(null);
+    setCatalogViewMode("categories");
+    setCategoriesPage(1);
   };
 
   // Formateo de precio según la moneda activa
@@ -514,6 +542,11 @@ export default function StorefrontClient({
     [categoriesList, activeCategoryFilter]
   );
 
+  const activeSubcategoryObj = useMemo(
+    () => subcategoriesList.find((s) => s.id === activeSubcategoryFilter),
+    [subcategoriesList, activeSubcategoryFilter]
+  );
+
   const availableSubcategories = useMemo(() => {
     return subcategoriesList.filter((s) => {
       if (activeCategoryFilter === "all") return true;
@@ -521,12 +554,22 @@ export default function StorefrontClient({
     });
   }, [subcategoriesList, activeCategoryFilter]);
 
+  const subcategoryStats = useMemo(() => {
+    const stats: Record<string, number> = {};
+    for (const prod of productsList) {
+      if (prod.subcategoria_id) {
+        stats[prod.subcategoria_id] = (stats[prod.subcategoria_id] || 0) + 1;
+      }
+    }
+    return stats;
+  }, [productsList]);
+
   const filteredProducts = useMemo(() => {
     return productsList.filter((p) => {
       if (activeCategoryFilter !== "all" && p.categoria_id !== activeCategoryFilter) {
         return false;
       }
-      if (activeSubcategoryFilter !== "all" && p.subcategoria_id !== activeSubcategoryFilter) {
+      if (activeSubcategoryFilter && activeSubcategoryFilter !== "all" && p.subcategoria_id !== activeSubcategoryFilter) {
         return false;
       }
       return true;
@@ -1032,12 +1075,18 @@ export default function StorefrontClient({
             <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight uppercase sm:normal-case">
               {activeCategoryFilter === "all" && catalogViewMode === "categories"
                 ? "Explora Nuestras Categorías"
+                : activeCategoryFilter !== "all" && activeSubcategoryFilter === null && availableSubcategories.length > 0
+                ? `Subcategorías de ${activeCategoryObj?.nombre || "Categoría"}`
                 : activeCategoryFilter !== "all"
-                ? (activeCategoryObj?.nombre || "Categoría")
+                ? `${activeCategoryObj?.nombre || "Categoría"}${activeSubcategoryObj ? ` > ${activeSubcategoryObj.nombre}` : (activeSubcategoryFilter === "all" ? " > Todos los Paquetes" : "")}`
                 : "Todos los Productos"}
             </h2>
             <p className="hidden sm:block text-xs sm:text-sm text-zinc-300 mt-1 max-w-xl">
-              Selecciona una categoría de entrada para ver sus subcategorías, paquetes y recargas.
+              {activeCategoryFilter === "all" && catalogViewMode === "categories"
+                ? "Selecciona una categoría de entrada para ver sus juegos, subcategorías y recargas disponibles."
+                : activeCategoryFilter !== "all" && activeSubcategoryFilter === null && availableSubcategories.length > 0
+                ? "Elige un juego o subcategoría para ver todos sus paquetes y realizar tu compra en 1 clic."
+                : "Recargas directas e instantáneas con entrega inmediata y soporte garantizado."}
             </p>
           </div>
 
@@ -1047,7 +1096,8 @@ export default function StorefrontClient({
               onClick={() => {
                 setCatalogViewMode("categories");
                 setActiveCategoryFilter("all");
-                setActiveSubcategoryFilter("all");
+                setActiveSubcategoryFilter(null);
+                setCategoriesPage(1);
               }}
               className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
                 activeCategoryFilter === "all" && catalogViewMode === "categories"
@@ -1063,6 +1113,7 @@ export default function StorefrontClient({
                 setCatalogViewMode("all_products");
                 setActiveCategoryFilter("all");
                 setActiveSubcategoryFilter("all");
+                setProductsPage(1);
               }}
               className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
                 catalogViewMode === "all_products"
@@ -1195,18 +1246,15 @@ export default function StorefrontClient({
               </div>
             )}
           </div>
-        ) : (
-          /* 2. MODO VISTA DE PRODUCTOS (CUANDO SE HACE CLIC EN UNA CATEGORÍA O TODOS) */
+        ) : activeCategoryFilter !== "all" && activeSubcategoryFilter === null && availableSubcategories.length > 0 ? (
+          /* ========================================================================= */
+          /* 2. NIVEL 2: MODO CUADRÍCULA DE SUBCATEGORÍAS (8 POR VISTA - EJ. BLOOD STRIKE, FREE FIRE) */
+          /* ========================================================================= */
           <div className="space-y-6">
-            
-            {/* Barra de Navegación & Filtros */}
-            <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-2xl bg-[#0B0D13]/85 border border-white/15">
+            {/* Barra superior de navegación */}
+            <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-2xl bg-[#0B0D13]/85 border border-white/15 backdrop-blur-md">
               <button
-                onClick={() => {
-                  setActiveCategoryFilter("all");
-                  setActiveSubcategoryFilter("all");
-                  setCatalogViewMode("categories");
-                }}
+                onClick={handleBackToCategories}
                 className="px-4 py-2 rounded-full bg-white/10 hover:bg-white/20 text-white font-bold text-xs flex items-center gap-2 transition hover:scale-105 active:scale-95"
               >
                 <ArrowLeft className="w-4 h-4 text-[#FFF01F]" />
@@ -1215,7 +1263,160 @@ export default function StorefrontClient({
 
               <div className="flex items-center gap-2">
                 <span className="text-xs font-mono text-[#FFF01F] font-bold">
-                  {activeCategoryObj ? activeCategoryObj.nombre : "Todos los Productos"}
+                  {activeCategoryObj ? activeCategoryObj.nombre : "Categoría"}
+                </span>
+                <span className="px-2.5 py-0.5 rounded-full bg-[#FF007F] text-white text-xs font-mono font-bold">
+                  {availableSubcategories.length} subcategorías
+                </span>
+              </div>
+            </div>
+
+            {/* Cuadrícula de Subcategorías (8 en 8) */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5 sm:gap-4.5">
+              {availableSubcategories
+                .slice((subcategoriesPage - 1) * 8, subcategoriesPage * 8)
+                .map((sub) => {
+                  const prodsCount = subcategoryStats[sub.id] || 0;
+
+                  return (
+                    <div
+                      key={sub.id}
+                      onClick={() => handleSelectSubcategory(sub.id)}
+                      className="rounded-3xl bg-[#10121A]/85 border border-white/10 hover:border-[#FFF01F]/70 transition-all duration-300 hover:scale-[1.02] cursor-pointer shadow-xl p-4 sm:p-5 flex flex-col justify-between h-48 sm:h-56 group relative backdrop-blur-md"
+                    >
+                      {/* Fila Superior */}
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="px-2 py-0.5 rounded-full bg-black/70 border border-white/10 text-white text-[10px] font-mono uppercase tracking-wider">
+                          ✦ JUEGO
+                        </span>
+                        <span className="px-2 py-0.5 rounded-full bg-[#FF007F] text-white text-[10px] font-mono font-bold">
+                          {prodsCount} {prodsCount === 1 ? "Paquete" : "Paquetes"}
+                        </span>
+                      </div>
+
+                      {/* Imagen de la Subcategoría */}
+                      <div className="my-auto flex items-center justify-center">
+                        {sub.imagen_url ? (
+                          <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl overflow-hidden border border-white/15 group-hover:scale-110 group-hover:border-[#FFF01F]/60 transition-all duration-300 shadow-xl bg-black/60 flex items-center justify-center p-1.5 relative">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={sub.imagen_url}
+                              alt={sub.nombre}
+                              loading="lazy"
+                              decoding="async"
+                              onError={(e) => {
+                                (e.currentTarget as HTMLImageElement).style.display = "none";
+                              }}
+                              className="w-full h-full object-contain"
+                            />
+                          </div>
+                        ) : (
+                          <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center group-hover:scale-110 group-hover:border-[#FFF01F]/40 transition-all duration-300 shadow-inner">
+                            <Gamepad2 className="w-8 h-8 sm:w-10 sm:h-10 text-[#FFF01F]" />
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Pie de Tarjeta de Subcategoría */}
+                      <div className="text-center pt-2">
+                        <h3 className="text-base font-black text-white group-hover:text-[#FFF01F] transition-colors leading-tight">
+                          {sub.nombre}
+                        </h3>
+                        <p className="text-[11px] text-amber-400 font-mono mt-1 flex items-center justify-center gap-1 group-hover:translate-x-0.5 transition-transform">
+                          <span>Ver Paquetes</span>
+                          <ArrowRight className="w-3 h-3" />
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+
+              {/* Tarjeta para ver todos los productos de esta categoría */}
+              <div
+                onClick={() => handleSelectSubcategory("all")}
+                className="rounded-3xl bg-[#10121A]/85 border border-white/10 hover:border-[#FFF01F]/50 transition-all duration-300 hover:scale-[1.02] cursor-pointer shadow-xl p-4 sm:p-5 flex flex-col justify-between h-48 sm:h-56 group relative backdrop-blur-md"
+              >
+                <div className="flex items-center justify-between gap-1">
+                  <span className="px-2 py-0.5 rounded-full bg-black/70 border border-white/10 text-white text-[10px] font-mono uppercase tracking-wider">
+                    ✦ COMPLETO
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full bg-[#FFF01F] text-black text-[10px] font-mono font-bold">
+                    {categoryStats[activeCategoryFilter]?.prodsCount || 0} Total
+                  </span>
+                </div>
+
+                <div className="my-auto flex items-center justify-center">
+                  <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center group-hover:scale-110 group-hover:border-[#FFF01F]/40 transition-all duration-300 shadow-inner">
+                    <ListFilter className="w-8 h-8 sm:w-10 sm:h-10 text-[#FFF01F]" />
+                  </div>
+                </div>
+
+                <div className="text-center pt-2">
+                  <h3 className="text-base font-black text-white group-hover:text-[#FFF01F] transition-colors leading-tight">
+                    Ver Todos
+                  </h3>
+                  <p className="text-[11px] text-zinc-400 font-mono mt-1">
+                    Todos los paquetes de {activeCategoryObj?.nombre}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Paginación de Subcategorías (8 en 8) */}
+            {availableSubcategories.length > 8 && (
+              <div className="flex items-center justify-center gap-2 mt-6 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setSubcategoriesPage((p) => Math.max(1, p - 1))}
+                  disabled={subcategoriesPage <= 1}
+                  className="px-4 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-xs font-bold disabled:opacity-30 disabled:cursor-not-allowed transition"
+                >
+                  ← Anterior
+                </button>
+                <span className="text-xs font-mono text-zinc-400 font-bold px-2">
+                  Página {subcategoriesPage} de {Math.max(1, Math.ceil(availableSubcategories.length / 8))}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSubcategoriesPage((p) => Math.min(Math.max(1, Math.ceil(availableSubcategories.length / 8)), p + 1))}
+                  disabled={subcategoriesPage >= Math.ceil(availableSubcategories.length / 8)}
+                  className="px-4 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-xs font-bold disabled:opacity-30 disabled:cursor-not-allowed transition"
+                >
+                  Siguiente →
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          /* ========================================================================= */
+          /* 3. NIVEL 3: VISTA DE PRODUCTOS (EVENT CARDS: 70% IMAGEN, 30% DETALLES)    */
+          /* ========================================================================= */
+          <div className="space-y-6">
+            
+            {/* Barra de Navegación & Filtros */}
+            <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-2xl bg-[#0B0D13]/85 border border-white/15 backdrop-blur-md">
+              <div className="flex items-center gap-2">
+                {activeCategoryFilter !== "all" && availableSubcategories.length > 0 && (
+                  <button
+                    onClick={handleBackToSubcategories}
+                    className="px-3.5 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white font-bold text-xs flex items-center gap-1.5 transition hover:scale-105 active:scale-95"
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5 text-[#FFF01F]" />
+                    <span>Volver a Subcategorías</span>
+                  </button>
+                )}
+                <button
+                  onClick={handleBackToCategories}
+                  className="px-3.5 py-1.5 rounded-full bg-white/5 hover:bg-white/15 text-zinc-300 hover:text-white font-medium text-xs flex items-center gap-1.5 transition"
+                >
+                  <span>Categorías</span>
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-mono text-[#FFF01F] font-bold">
+                  {activeCategoryObj ? activeCategoryObj.nombre : "Catálogo Global"}
+                  {activeSubcategoryObj ? ` > ${activeSubcategoryObj.nombre}` : (activeSubcategoryFilter === "all" ? " > Todos" : "")}
                 </span>
                 <span className="px-2.5 py-0.5 rounded-full bg-[#FF007F] text-white text-xs font-mono font-bold">
                   {filteredProducts.length} disponibles
@@ -1225,7 +1426,7 @@ export default function StorefrontClient({
 
             {/* Subcategorías disponibles (Paginadas de 8 en 8) */}
             {availableSubcategories.length > 0 && (
-              <div className="space-y-2 p-3 rounded-2xl bg-black/40 border border-white/10">
+              <div className="space-y-2 p-3 rounded-2xl bg-black/40 border border-white/10 backdrop-blur-md">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-xs font-mono text-[#FFF01F] font-bold uppercase mr-1 flex items-center gap-1">
                     <Tag className="w-3.5 h-3.5" /> Subcategorías:
@@ -1294,17 +1495,13 @@ export default function StorefrontClient({
               </div>
             )}
 
-            {/* Cuadrícula de Productos (Paginados de 10 en 10) */}
+            {/* Cuadrícula de Productos (EVENT CARDS: 70% Imagen, 30% Detalles) */}
             {filteredProducts.length === 0 ? (
               <div className="rounded-3xl p-10 text-center max-w-md mx-auto space-y-3 bg-[#0B0D13]/80 border border-white/15">
                 <PackageOpen className="w-10 h-10 text-[#FFF01F] mx-auto" />
                 <p className="text-sm text-white/80">No hay productos en esta categoría por ahora.</p>
                 <button
-                  onClick={() => {
-                    setActiveCategoryFilter("all");
-                    setActiveSubcategoryFilter("all");
-                    setCatalogViewMode("categories");
-                  }}
+                  onClick={handleBackToCategories}
                   className="px-5 py-2.5 rounded-full bg-[#FFF01F] text-black font-bold text-xs"
                 >
                   Ver Categorías
@@ -1312,136 +1509,154 @@ export default function StorefrontClient({
               </div>
             ) : (
               <div className="space-y-6">
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
                   {filteredProducts.slice((productsPage - 1) * 10, productsPage * 10).map((prod) => {
                     const prodVariants = variantsList.filter((v) => v.producto_id === prod.id && v.activo !== false);
 
                     return (
                       <div 
                         key={prod.id} 
-                        className="rounded-2xl p-4.5 bg-[#141620]/90 border border-white/15 hover:border-[#FFF01F] transition-all flex flex-col justify-between group shadow-xl"
+                        className="rounded-3xl bg-[#10121A]/90 border border-white/10 hover:border-[#FFF01F]/70 transition-all duration-300 hover:-translate-y-1 group shadow-2xl flex flex-col justify-between overflow-hidden relative backdrop-blur-md"
                       >
-                        <div>
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="px-2 py-0.5 rounded-md bg-white/10 text-[10px] font-mono text-zinc-300">
-                              {prod.categoria_nombre || "General"}
+                        {/* 1. SECCIÓN VISUAL (70% DEL PESO VISUAL: IMAGEN DE EVENT CARD) */}
+                        <div className="relative w-full h-56 sm:h-64 bg-gradient-to-b from-[#181a28] via-[#12141f] to-[#0b0c13] flex items-center justify-center p-4 overflow-hidden border-b border-white/5">
+                          {/* Resplandor radial de fondo */}
+                          <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-amber-500/10 via-transparent to-transparent pointer-events-none" />
+
+                          {/* Badges superiores flotantes */}
+                          <div className="absolute top-3 left-3 flex flex-col gap-1.5 z-10 max-w-[70%]">
+                            <span className="px-2.5 py-1 rounded-full bg-black/75 backdrop-blur-md border border-white/15 text-[10px] font-mono text-zinc-200 uppercase tracking-wider font-bold shadow-lg truncate">
+                              {prod.subcategoria_nombre || prod.categoria_nombre || "Oficial"}
                             </span>
                             {prod.oferta_especial && (
-                              <span className="px-2 py-0.5 rounded-full bg-[#FF007F] text-white text-[10px] font-black uppercase tracking-wider">
-                                OFERTA
+                              <span className="px-2.5 py-0.5 rounded-full bg-gradient-to-r from-[#D61A1A] to-[#FF007F] text-white text-[10px] font-black uppercase tracking-wider shadow-[0_0_12px_rgba(255,0,127,0.6)] flex items-center gap-1 self-start">
+                                <Flame className="w-3 h-3 text-[#FFF01F]" />
+                                <span>OFERTA</span>
                               </span>
                             )}
                           </div>
 
-                          <div className="flex items-start gap-3">
-                            {prod.imagen_url ? (
-                              <div className="w-16 h-16 rounded-2xl bg-black/60 border border-white/10 overflow-hidden flex items-center justify-center p-1 shrink-0">
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img 
-                                  src={prod.imagen_url} 
-                                  alt={prod.nombre} 
-                                  loading="lazy"
-                                  decoding="async"
-                                  className="w-full h-full object-contain group-hover:scale-105 transition-transform" 
-                                />
-                              </div>
+                          {/* Botón flotante para copiar enlace directo */}
+                          <button
+                            type="button"
+                            onClick={(e) => handleCopyDirectLink(e, prod, null)}
+                            className="absolute top-3 right-3 z-10 p-2 rounded-full bg-black/60 hover:bg-black/90 backdrop-blur-md border border-white/20 text-zinc-300 hover:text-white transition shadow-lg"
+                            title="Copiar enlace directo de este producto"
+                          >
+                            {copiedLink === prod.id ? (
+                              <Check className="w-3.5 h-3.5 text-emerald-400" />
                             ) : (
-                              <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-[#D61A1A] to-[#FFF01F] flex items-center justify-center text-black font-black text-lg shadow shrink-0">
-                                ⚡
-                              </div>
+                              <Copy className="w-3.5 h-3.5" />
                             )}
+                          </button>
 
-                            <div className="min-w-0 flex-1">
-                              <h4 className="text-base font-bold text-white group-hover:text-[#FFF01F] transition-colors leading-tight">
-                                {prod.nombre}
-                              </h4>
-                              {prod.descripcion && (
-                                <p className="text-xs text-zinc-400 mt-1 line-clamp-2 leading-relaxed">
-                                  {prod.descripcion}
-                                </p>
-                              )}
+                          {/* Imagen principal del Producto sin cortes */}
+                          {prod.imagen_url ? (
+                            <div className="w-full h-full flex items-center justify-center relative">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img 
+                                src={prod.imagen_url} 
+                                alt={prod.nombre} 
+                                loading="lazy"
+                                decoding="async"
+                                className="max-h-full max-w-full object-contain filter drop-shadow-[0_12px_24px_rgba(0,0,0,0.85)] group-hover:scale-105 transition-transform duration-300" 
+                              />
                             </div>
-                          </div>
-
-                          {/* Variantes / Subproductos con Enlaces Directos Propios */}
-                          {prodVariants.length > 0 && (
-                            <div className="mt-3 pt-2.5 border-t border-white/10 space-y-1.5">
-                              <div className="flex items-center justify-between">
-                                <span className="text-[10px] font-mono uppercase text-[#FFF01F] font-bold block">
-                                  Opciones ({prodVariants.length}):
-                                </span>
-                                <span className="text-[9px] text-zinc-500 font-mono">Toca para comprar</span>
-                              </div>
-                              <div className="space-y-1 max-h-36 overflow-y-auto pr-1">
-                                {prodVariants.map((v) => (
-                                  <div 
-                                    key={v.id}
-                                    onClick={() => handleOpenProduct(prod, v)}
-                                    className="p-1.5 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-between text-xs transition cursor-pointer group/var"
-                                  >
-                                    <div className="flex items-center gap-1.5 min-w-0 pr-1">
-                                      {v.imagen_url ? (
-                                        <div className="w-5 h-5 rounded overflow-hidden bg-black/60 flex items-center justify-center shrink-0 border border-white/10">
-                                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                                          <img src={v.imagen_url} alt="" className="w-full h-full object-contain p-0.5" />
-                                        </div>
-                                      ) : null}
-                                      <span className="truncate font-medium group-hover/var:text-[#FFF01F] transition-colors">{v.nombre}</span>
-                                    </div>
-                                    <div className="flex items-center gap-1.5 shrink-0">
-                                      <span className="font-mono text-[#FFF01F] font-bold">
-                                        {formatPrice(v.precio_base, v)}
-                                      </span>
-                                      <button
-                                        type="button"
-                                        onClick={(e) => handleCopyDirectLink(e, prod, v)}
-                                        className="p-1 rounded-md text-zinc-400 hover:text-white hover:bg-white/10 transition"
-                                        title="Copiar link directo a este subproducto"
-                                      >
-                                        {copiedLink === `${prod.id}_${v.id}` ? (
-                                          <Check className="w-3.5 h-3.5 text-emerald-400" />
-                                        ) : (
-                                          <Copy className="w-3.5 h-3.5" />
-                                        )}
-                                      </button>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
+                          ) : (
+                            <div className="w-24 h-24 rounded-3xl bg-gradient-to-tr from-[#D61A1A] via-[#FF007F] to-[#FFF01F] flex items-center justify-center text-slate-950 font-black text-3xl shadow-2xl">
+                              ⚡
                             </div>
                           )}
                         </div>
 
-                        <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between gap-2">
+                        {/* 2. SECCIÓN DE INFORMACIÓN (30% DEL PESO: TÍTULO, DESCRIPCIÓN, SUBPRODUCTOS Y PRECIO) */}
+                        <div className="p-4 sm:p-5 flex flex-col justify-between flex-1 bg-[#10121A] space-y-3">
                           <div>
-                            <span className="text-[10px] text-zinc-400 uppercase font-mono block">
-                              Precio
-                            </span>
-                            <span className="text-base font-black text-[#FFF01F] font-mono">
-                              {formatPrice(prod.precio_base, prod)}
-                            </span>
+                            <h4 className="text-lg sm:text-xl font-black text-white group-hover:text-[#FFF01F] transition-colors leading-snug">
+                              {prod.nombre}
+                            </h4>
+
+                            {/* Descripción configurada desde el Panel de Administración */}
+                            {prod.descripcion && (
+                              <p className="text-xs text-zinc-300 mt-1.5 line-clamp-2 leading-relaxed">
+                                {prod.descripcion}
+                              </p>
+                            )}
+
+                            {/* Variantes / Subproductos (ej. recargas, cantidades) */}
+                            {prodVariants.length > 0 && (
+                              <div className="mt-3 pt-2.5 border-t border-white/10 space-y-1.5">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[10px] font-mono uppercase text-[#FFF01F] font-bold block">
+                                    Subproductos ({prodVariants.length}):
+                                  </span>
+                                  <span className="text-[9px] text-zinc-400 font-mono">Toca para comprar</span>
+                                </div>
+
+                                <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                                  {prodVariants.map((v) => (
+                                    <div 
+                                      key={v.id}
+                                      onClick={() => handleOpenProduct(prod, v)}
+                                      className="p-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.1] border border-white/5 hover:border-amber-400/40 flex items-center justify-between text-xs transition cursor-pointer group/var"
+                                    >
+                                      <div className="flex items-center gap-2 min-w-0 pr-1">
+                                        {v.imagen_url ? (
+                                          <div className="w-6 h-6 rounded-md overflow-hidden bg-black/60 flex items-center justify-center shrink-0 border border-white/10">
+                                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                                            <img src={v.imagen_url} alt="" className="w-full h-full object-contain p-0.5" />
+                                          </div>
+                                        ) : (
+                                          <div className="w-5 h-5 rounded bg-amber-500/20 text-amber-300 flex items-center justify-center text-[10px] shrink-0 font-bold">
+                                            ⚡
+                                          </div>
+                                        )}
+                                        <span className="truncate font-semibold text-zinc-200 group-hover/var:text-[#FFF01F] transition-colors">
+                                          {v.nombre}
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center gap-2 shrink-0">
+                                        <span className="font-mono text-[#FFF01F] font-bold">
+                                          {formatPrice(v.precio_base, v)}
+                                        </span>
+                                        <button
+                                          type="button"
+                                          onClick={(e) => handleCopyDirectLink(e, prod, v)}
+                                          className="p-1 rounded-md text-zinc-400 hover:text-white hover:bg-white/10 transition"
+                                          title="Copiar link directo a este subproducto"
+                                        >
+                                          {copiedLink === `${prod.id}_${v.id}` ? (
+                                            <Check className="w-3.5 h-3.5 text-emerald-400" />
+                                          ) : (
+                                            <Copy className="w-3.5 h-3.5" />
+                                          )}
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                           </div>
 
-                          <div className="flex items-center gap-1.5">
-                            <button
-                              type="button"
-                              onClick={(e) => handleCopyDirectLink(e, prod, null)}
-                              className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-zinc-300 hover:text-white transition"
-                              title="Copiar enlace directo de este producto"
-                            >
-                              {copiedLink === prod.id ? (
-                                <Check className="w-3.5 h-3.5 text-emerald-400" />
-                              ) : (
-                                <Copy className="w-3.5 h-3.5" />
-                              )}
-                            </button>
+                          {/* Fila Inferior: Precio destacado y Botón Comprar */}
+                          <div className="pt-3 border-t border-white/10 flex items-center justify-between gap-3">
+                            <div className="min-w-0">
+                              <span className="text-[10px] text-zinc-400 uppercase font-mono tracking-wider block">
+                                {prodVariants.length > 0 ? "Desde" : "Precio"}
+                              </span>
+                              <span className="text-lg sm:text-xl font-black text-[#FFF01F] font-mono tracking-tight block truncate">
+                                {formatPrice(prod.precio_base, prod)}
+                              </span>
+                            </div>
 
                             <button
+                              type="button"
                               onClick={() => handleOpenProduct(prod, prodVariants.length > 0 ? prodVariants[0] : null)}
-                              className="px-4 py-2 rounded-full bg-white text-black font-bold text-xs hover:bg-[#FFF01F] transition flex items-center gap-1 shadow"
+                              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#FFF01F] to-amber-400 hover:from-yellow-300 hover:to-amber-300 text-slate-950 font-black text-xs flex items-center gap-1.5 shadow-[0_0_15px_rgba(255,240,31,0.35)] hover:scale-105 active:scale-95 transition-all shrink-0"
                             >
                               <span>Comprar</span>
-                              <ChevronRight className="w-3.5 h-3.5 text-black" />
+                              <ArrowRight className="w-3.5 h-3.5" />
                             </button>
                           </div>
                         </div>

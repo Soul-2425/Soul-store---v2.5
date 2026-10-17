@@ -417,6 +417,7 @@ export default function AdminDashboardPage() {
   ]);
   const [savingPaymentMethod, setSavingPaymentMethod] = useState(false);
   const [previewVoucherUrl, setPreviewVoucherUrl] = useState<string | null>(null);
+  const [selectedOrderDetails, setSelectedOrderDetails] = useState<AdminOrder | null>(null);
 
   // Multidivisa P2P Switch state (Módulo 3)
   const [modoAutomatico, setModoAutomatico] = useState(true);
@@ -2686,7 +2687,129 @@ export default function AdminDashboardPage() {
               </div>
             ) : (
               <div className="glass-panel rounded-2xl border border-slate-800 overflow-hidden">
-                <div className="overflow-x-auto">
+                {/* 1. VISTA MÓVIL (TARJETAS COMPACTAS CON BOTÓN VER DETALLES - SIN SCROLL HORIZONTAL) */}
+                <div className="block lg:hidden divide-y divide-slate-800/80">
+                  {orders.slice((ordersPage - 1) * 10, ordersPage * 10).map((o) => {
+                    const isHighlighted = highlightOrderId && (o.id === highlightOrderId || o.id.toLowerCase().startsWith(highlightOrderId.toLowerCase()) || highlightOrderId.toUpperCase().includes(o.id.slice(0, 8).toUpperCase()));
+                    return (
+                      <div 
+                        key={`mob_${o.item_id}`}
+                        className={`p-4 space-y-3 transition-colors ${
+                          isHighlighted 
+                            ? "bg-fuchsia-950/60 border-l-4 border-fuchsia-400 shadow-md" 
+                            : "bg-slate-900/30 hover:bg-slate-900/60"
+                        }`}
+                      >
+                        {/* Fila 1: ID de la Orden + Hora + Estado interactivo */}
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-mono font-black text-sm text-white">
+                              #SOUL-{o.id.slice(0, 8).toUpperCase()}
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-mono">
+                              {new Date(o.creado_en).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                            </span>
+                            {o.es_override_duplicado && (
+                              <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 text-[9px] font-mono border border-amber-500/40">
+                                ⚠️ Override
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Selector rápido de estado en móvil */}
+                          <select
+                            value={o.item_estado}
+                            onChange={(e) => handleUpdateOrderStatus(o.id, o.item_id, e.target.value)}
+                            className={`px-2 py-1 rounded-lg font-mono text-xs font-bold outline-none cursor-pointer border ${
+                              o.item_estado === "ENTREGADO"
+                                ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                                : o.item_estado === "PROCESANDO"
+                                ? "bg-cyan-500/20 text-cyan-300 border-cyan-500/40"
+                                : o.item_estado === "FALLIDO"
+                                ? "bg-red-500/20 text-red-300 border-red-500/40"
+                                : "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                            }`}
+                          >
+                            <option value="EN_COLA" className="bg-slate-900 text-amber-300">EN_COLA</option>
+                            <option value="PROCESANDO" className="bg-slate-900 text-cyan-300">PROCESANDO</option>
+                            <option value="ENTREGADO" className="bg-slate-900 text-emerald-300">ENTREGADO</option>
+                            <option value="FALLIDO" className="bg-slate-900 text-red-300">FALLIDO</option>
+                          </select>
+                        </div>
+
+                        {/* Fila 2: Cliente, Producto y Total Pagado */}
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          <div>
+                            <span className="text-[10px] text-slate-400 uppercase font-mono block">Cliente:</span>
+                            <span className="font-bold text-white truncate block">{o.usuario_nombre}</span>
+                            <span className="text-[11px] font-mono text-cyan-400">{o.usuario_whatsapp || "Sin Teléfono"}</span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-[10px] text-slate-400 uppercase font-mono block">Total Pagado:</span>
+                            <span className="font-mono font-bold text-sm block">
+                              {o.moneda_pago === "VES" && o.total_ves ? (
+                                <span className="text-emerald-400">{o.total_ves} VES</span>
+                              ) : o.moneda_pago === "MXN" && o.total_mxn ? (
+                                <span className="text-cyan-400">${o.total_mxn} MXN</span>
+                              ) : (
+                                <span className="text-white">${o.total_usd} USD</span>
+                              )}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Fila 3: Producto */}
+                        <div className="p-2 rounded-xl bg-slate-950/60 border border-slate-800 text-xs flex items-center justify-between">
+                          <div className="truncate pr-2">
+                            <span className="text-[10px] text-slate-400 uppercase font-mono block">Producto:</span>
+                            <span className="font-bold text-white truncate block">{o.producto_nombre}</span>
+                          </div>
+                          {o.player_id && (
+                            <span className="text-[11px] font-mono text-fuchsia-300 shrink-0">
+                              ID: {o.player_id}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Fila 4: Botones de Acción */}
+                        <div className="flex items-center gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedOrderDetails(o)}
+                            className="flex-1 py-2 px-3 rounded-xl bg-fuchsia-500/20 hover:bg-fuchsia-500/30 text-fuchsia-300 border border-fuchsia-500/40 font-bold text-xs flex items-center justify-center gap-1.5 transition active:scale-95 shadow-sm"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>Ver Detalles</span>
+                          </button>
+
+                          <a
+                            href={getWhatsAppNotifyLink(o)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex-1 py-2 px-3 rounded-xl bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/40 font-bold text-xs inline-flex items-center justify-center gap-1.5 transition shadow-sm"
+                          >
+                            <span>WhatsApp</span>
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </a>
+
+                          {o.comprobante_url && (
+                            <button
+                              type="button"
+                              onClick={() => setPreviewVoucherUrl(o.comprobante_url!)}
+                              className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-pink-400 border border-white/10 transition shrink-0"
+                              title="Ver Comprobante"
+                            >
+                              <CreditCard className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* 2. VISTA ESCRITORIO (TABLA COMPLETA CON 7 COLUMNAS) */}
+                <div className="hidden lg:block overflow-x-auto">
                   <table className="w-full text-left text-sm text-slate-300">
                     <thead className="bg-slate-900/90 text-xs uppercase font-mono text-slate-400 border-b border-slate-800">
                       <tr>
@@ -7839,6 +7962,252 @@ export default function AdminDashboardPage() {
                 className="px-5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold transition"
               >
                 Cerrar Visor
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL: DETALLES COMPLETOS DEL PEDIDO (MÓVIL / ESCRITORIO) */}
+      {/* ======================================================== */}
+      {selectedOrderDetails && (
+        <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="relative max-w-xl w-full bg-[#0B0D13] border border-white/20 rounded-3xl p-5 sm:p-6 text-white space-y-4 shadow-2xl my-auto">
+            {/* Encabezado del Modal */}
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-fuchsia-500/20 text-fuchsia-400 flex items-center justify-center shrink-0">
+                  <ShoppingBag className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-mono font-bold text-base text-white flex items-center gap-2">
+                    <span>#SOUL-{selectedOrderDetails.id.slice(0, 8).toUpperCase()}</span>
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(selectedOrderDetails.id, `mod_${selectedOrderDetails.id}`)}
+                      className="text-slate-400 hover:text-white"
+                      title="Copiar ID completo"
+                    >
+                      {copiedId === `mod_${selectedOrderDetails.id}` ? (
+                        <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      ) : (
+                        <Copy className="w-3.5 h-3.5" />
+                      )}
+                    </button>
+                  </h3>
+                  <span className="text-[11px] text-slate-400 font-mono">
+                    {new Date(selectedOrderDetails.creado_en).toLocaleString()}
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedOrderDetails(null)}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Estado de la Orden con Selector Directo */}
+            <div className="p-3 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-between gap-3">
+              <span className="text-xs font-mono text-slate-300 font-bold uppercase">Estado de Entrega:</span>
+              <select
+                value={selectedOrderDetails.item_estado}
+                onChange={(e) => {
+                  const newStatus = e.target.value;
+                  handleUpdateOrderStatus(selectedOrderDetails.id, selectedOrderDetails.item_id, newStatus);
+                  setSelectedOrderDetails({ ...selectedOrderDetails, item_estado: newStatus });
+                }}
+                className={`px-3 py-1.5 rounded-xl font-mono text-xs font-bold outline-none cursor-pointer border ${
+                  selectedOrderDetails.item_estado === "ENTREGADO"
+                    ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                    : selectedOrderDetails.item_estado === "PROCESANDO"
+                    ? "bg-cyan-500/20 text-cyan-300 border-cyan-500/40"
+                    : selectedOrderDetails.item_estado === "FALLIDO"
+                    ? "bg-red-500/20 text-red-300 border-red-500/40"
+                    : "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                }`}
+              >
+                <option value="EN_COLA" className="bg-slate-900 text-amber-300">EN_COLA</option>
+                <option value="PROCESANDO" className="bg-slate-900 text-cyan-300">PROCESANDO</option>
+                <option value="ENTREGADO" className="bg-slate-900 text-emerald-300">ENTREGADO</option>
+                <option value="FALLIDO" className="bg-slate-900 text-red-300">FALLIDO</option>
+              </select>
+            </div>
+
+            {/* Bloque 1: Datos del Cliente */}
+            <div className="space-y-2 p-3.5 rounded-2xl bg-slate-950/60 border border-slate-800">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-fuchsia-400 font-bold block">
+                👤 Datos del Cliente
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                <div>
+                  <span className="text-slate-400 block text-[11px]">Nombre:</span>
+                  <span className="text-white font-bold">{selectedOrderDetails.usuario_nombre}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[11px]">WhatsApp:</span>
+                  {selectedOrderDetails.usuario_whatsapp ? (
+                    <a
+                      href={`https://wa.me/${selectedOrderDetails.usuario_whatsapp.replace(/[^0-9]/g, "")}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-cyan-400 font-mono font-bold flex items-center gap-1 hover:underline"
+                    >
+                      <span>{selectedOrderDetails.usuario_whatsapp}</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  ) : (
+                    <span className="text-slate-500">No especificado</span>
+                  )}
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[11px]">Email:</span>
+                  <span className="text-slate-300 font-mono truncate block">{selectedOrderDetails.usuario_email}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[11px]">Rango de Cuenta:</span>
+                  <span className="text-amber-300 font-bold">{selectedOrderDetails.usuario_rango || "CLIENTE"}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Bloque 2: Producto & Requisitos del Juego */}
+            <div className="space-y-2 p-3.5 rounded-2xl bg-slate-950/60 border border-slate-800">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-amber-400 font-bold block">
+                🎮 Producto y Requisitos
+              </span>
+              <div className="text-xs space-y-1.5">
+                <div>
+                  <span className="text-slate-400 block text-[11px]">Producto solicitado:</span>
+                  <span className="text-white font-bold text-sm">{selectedOrderDetails.producto_nombre}</span>
+                </div>
+
+                {selectedOrderDetails.datos_dinamicos && typeof selectedOrderDetails.datos_dinamicos === "object" && Object.keys(selectedOrderDetails.datos_dinamicos).length > 0 ? (
+                  <div className="mt-2 space-y-1.5 pt-1.5 border-t border-slate-800">
+                    <span className="text-[11px] text-slate-400 font-bold block">Campos solicitados (Toca para copiar):</span>
+                    {Object.entries(selectedOrderDetails.datos_dinamicos).map(([campo, valor]) => (
+                      <div key={campo} className="flex items-center justify-between p-2 rounded-xl bg-slate-900 border border-slate-700 font-mono">
+                        <div>
+                          <span className="text-slate-400 text-[10px] uppercase block">{campo}</span>
+                          <span className="text-fuchsia-300 font-bold text-xs">{String(valor)}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => copyToClipboard(String(valor), `mod_field_${campo}`)}
+                          className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-xs text-white flex items-center gap-1 transition"
+                        >
+                          {copiedId === `mod_field_${campo}` ? (
+                            <>
+                              <Check className="w-3 h-3 text-emerald-400" />
+                              <span className="text-emerald-400 text-[10px]">Copiado</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3 h-3" />
+                              <span className="text-[10px]">Copiar</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : selectedOrderDetails.player_id ? (
+                  <div className="flex items-center justify-between p-2 rounded-xl bg-slate-900 border border-slate-700 font-mono mt-1">
+                    <div>
+                      <span className="text-slate-400 text-[10px] uppercase block">Player ID ({selectedOrderDetails.region || "Global"})</span>
+                      <span className="text-fuchsia-300 font-bold text-xs">{selectedOrderDetails.player_id}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(selectedOrderDetails.player_id!, "mod_pid")}
+                      className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-xs text-white flex items-center gap-1 transition"
+                    >
+                      {copiedId === "mod_pid" ? (
+                        <>
+                          <Check className="w-3 h-3 text-emerald-400" />
+                          <span className="text-emerald-400 text-[10px]">Copiado</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3 h-3" />
+                          <span className="text-[10px]">Copiar</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+
+            {/* Bloque 3: Datos de Pago y Comprobante */}
+            <div className="space-y-2 p-3.5 rounded-2xl bg-slate-950/60 border border-slate-800">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-emerald-400 font-bold block">
+                💳 Pago y Facturación
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                <div>
+                  <span className="text-slate-400 block text-[11px]">Método de Pago:</span>
+                  <span className="text-white font-bold">{selectedOrderDetails.metodo_pago_nombre || "Pago Manual"}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[11px]">Total Cobrado:</span>
+                  <span className="text-emerald-400 font-bold font-mono">
+                    {selectedOrderDetails.moneda_pago === "VES" && selectedOrderDetails.total_ves
+                      ? `${selectedOrderDetails.total_ves} VES ($${selectedOrderDetails.total_usd} USD)`
+                      : selectedOrderDetails.moneda_pago === "MXN" && selectedOrderDetails.total_mxn
+                      ? `$${selectedOrderDetails.total_mxn} MXN ($${selectedOrderDetails.total_usd} USD)`
+                      : `$${selectedOrderDetails.total_usd} USD`}
+                  </span>
+                </div>
+                {selectedOrderDetails.referencia_pago && (
+                  <div className="sm:col-span-2 flex items-center justify-between p-2 rounded-xl bg-slate-900 border border-slate-700">
+                    <div>
+                      <span className="text-slate-400 text-[10px] uppercase block">Referencia de Pago:</span>
+                      <span className="text-cyan-400 font-mono font-bold">{selectedOrderDetails.referencia_pago}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(selectedOrderDetails.referencia_pago!, "mod_ref")}
+                      className="px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-xs text-white flex items-center gap-1"
+                    >
+                      {copiedId === "mod_ref" ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                    </button>
+                  </div>
+                )}
+                {selectedOrderDetails.comprobante_url && (
+                  <div className="sm:col-span-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setPreviewVoucherUrl(selectedOrderDetails.comprobante_url!)}
+                      className="w-full py-2 px-3 rounded-xl bg-pink-500/20 hover:bg-pink-500/30 text-pink-300 border border-pink-500/40 text-xs font-bold flex items-center justify-center gap-2 transition"
+                    >
+                      <Eye className="w-4 h-4" />
+                      <span>Ver Comprobante de Pago Adjunto</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Acciones del Modal */}
+            <div className="flex flex-col sm:flex-row items-center gap-2 pt-2">
+              <a
+                href={getWhatsAppNotifyLink(selectedOrderDetails)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full sm:flex-1 py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-2 transition shadow-lg"
+              >
+                <span>Avisar al Cliente por WhatsApp</span>
+                <ExternalLink className="w-4 h-4" />
+              </a>
+              <button
+                type="button"
+                onClick={() => setSelectedOrderDetails(null)}
+                className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs transition"
+              >
+                Cerrar
               </button>
             </div>
           </div>
