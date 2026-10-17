@@ -208,6 +208,107 @@ export default function CheckoutModal({
     totalUsd: number;
   } | null>(null);
 
+  // Notificaciones Push permanentes y locales
+  const [pushPermission, setPushPermission] = useState<NotificationPermission>("default");
+  const [pushSubscribed, setPushSubscribed] = useState(false);
+  const [enablingPush, setEnablingPush] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && "Notification" in window) {
+      setPushPermission(Notification.permission);
+      if (Notification.permission === "granted") {
+        setPushSubscribed(true);
+        if ("serviceWorker" in navigator) {
+          navigator.serviceWorker.ready.then(async (reg) => {
+            const sub = await reg.pushManager.getSubscription();
+            if (sub) {
+              localStorage.setItem("soul_push_endpoint", sub.endpoint);
+            }
+          }).catch(() => {});
+        }
+      }
+    }
+  }, []);
+
+  const handleEnablePushPermanently = async () => {
+    if (typeof window === "undefined" || !("Notification" in window)) return;
+    try {
+      setEnablingPush(true);
+      const perm = await Notification.requestPermission();
+      setPushPermission(perm);
+      if (perm === "granted") {
+        let reg = await navigator.serviceWorker.getRegistration();
+        if (!reg) {
+          reg = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+        }
+        await navigator.serviceWorker.ready;
+        const vapidKey =
+          process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ||
+          "BHMT_to0ViXP-2jqt3MSXODstv5Xqq7YsdaouWOeLRtKPsC6AXl6WAqGqSYovGXRVtGk86A4JO7M2tzjS_rfZkI";
+        let sub = await reg.pushManager.getSubscription();
+        if (!sub) {
+          sub = await reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(vapidKey),
+          });
+        }
+        if (sub) {
+          localStorage.setItem("soul_push_endpoint", sub.endpoint);
+          localStorage.setItem("soul_push_permanent", "true");
+          setPushSubscribed(true);
+          await fetch("/api/notifications/subscribe", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ subscription: sub.toJSON(), userId: currentUser?.id }),
+          }).catch(() => {});
+
+          if (reg && reg.showNotification) {
+            reg.showNotification("🟢 Soul Store • Alertas Activadas", {
+              body: "¡Notificaciones permanentes activadas con éxito en tu dispositivo!",
+              icon: "/icon.png",
+              vibrate: [200, 100, 200],
+              tag: "perm-push-active",
+            } as any);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("Error habilitando notificaciones:", err);
+    } finally {
+      setEnablingPush(false);
+    }
+  };
+
+  const triggerLocalOrderNotification = async (orderNum: string) => {
+    try {
+      if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+        const notifTitle = `🟢 ¡Pedido Confirmado con Éxito!`;
+        const notifBody = `Tu recarga #${orderNum} (${product.nombre}${selectedSubVariant ? ` - ${selectedSubVariant.nombre}` : ""}) ha sido registrada y está en cola de despacho prioritario.`;
+
+        if ("serviceWorker" in navigator) {
+          const reg = await navigator.serviceWorker.ready;
+          if (reg && reg.showNotification) {
+            await reg.showNotification(notifTitle, {
+              body: notifBody,
+              icon: "/icon.png",
+              vibrate: [200, 100, 200, 100, 200],
+              tag: `order-${orderNum}`,
+              renotify: true,
+              data: { url: `/?order=${orderNum}` },
+            } as any);
+            return;
+          }
+        }
+        new Notification(notifTitle, {
+          body: notifBody,
+          icon: "/icon.png",
+        });
+      }
+    } catch (err) {
+      console.warn("Error enviando alerta local inmediata:", err);
+    }
+  };
+
   // Actualizar datos de usuario si cambian
   useEffect(() => {
     if (currentUser) {
@@ -464,6 +565,9 @@ export default function CheckoutModal({
           moneda: data.moneda,
           totalUsd: data.totalUsd,
         });
+
+        // Disparar de inmediato la notificación en el dispositivo actual
+        triggerLocalOrderNotification(data.orderNumber);
       } else if (res.status === 409) {
         setIsDuplicate(true);
         setCurrentStep(1);
@@ -553,6 +657,26 @@ export default function CheckoutModal({
                   <span className="text-cyan-400 font-mono">{referenciaPago}</span>
                 </div>
               )}
+            </div>
+
+            {/* Estado de Notificación en Dispositivo */}
+            <div className="p-3.5 rounded-2xl bg-gradient-to-r from-emerald-950/40 to-slate-900 border border-emerald-500/30 text-left flex items-center justify-between gap-3 shadow-inner">
+              <div className="flex items-center gap-2.5">
+                <span className="text-xl shrink-0 text-emerald-400">🔔</span>
+                <div className="text-xs">
+                  <span className="font-bold text-emerald-300 block">Notificación enviada a tu dispositivo</span>
+                  <p className="text-[11px] text-slate-300 leading-tight">
+                    Revisa la bandeja o barra superior de tu teléfono. Te notificaremos aquí al completarse la entrega.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => triggerLocalOrderNotification(orderResult.orderNumber)}
+                className="px-2.5 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 font-semibold text-[11px] transition shrink-0 border border-emerald-500/30 whitespace-nowrap"
+              >
+                Reenviar Alerta
+              </button>
             </div>
 
             {/* Vista previa del comprobante cargado */}
@@ -1064,14 +1188,40 @@ export default function CheckoutModal({
                   />
                 </div>
 
-                {/* Notificación de Alerta al Teléfono */}
-                <div className="flex items-center gap-2.5 p-3 rounded-2xl bg-gradient-to-r from-purple-950/40 to-slate-900 border border-purple-500/30 text-xs">
-                  <span className="text-base shrink-0">🔔</span>
-                  <div className="text-[11px] text-slate-300 leading-tight">
-                    <span className="font-bold text-white block">Aviso automático de entrega:</span>
-                    Recibirás una notificación en este teléfono tan pronto como tu orden sea completada.
+                {/* Notificación de Alerta al Teléfono (Permanente) */}
+                {pushPermission === "granted" ? (
+                  <div className="flex items-center justify-between p-3.5 rounded-2xl bg-gradient-to-r from-emerald-950/40 to-slate-900 border border-emerald-500/30 text-xs">
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-xl shrink-0 text-emerald-400">🔔</span>
+                      <div className="text-[11px] text-slate-300 leading-tight">
+                        <span className="font-bold text-emerald-400 block">Notificaciones Permanentes Activas</span>
+                        Recibirás un aviso en este teléfono al confirmar y al entregarse tu recarga.
+                      </div>
+                    </div>
+                    <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2.5 py-1 rounded-full font-mono font-bold shrink-0 border border-emerald-500/30">
+                      ACTIVO
+                    </span>
                   </div>
-                </div>
+                ) : (
+                  <div className="flex items-center justify-between p-3.5 rounded-2xl bg-gradient-to-r from-purple-950/40 to-slate-900 border border-purple-500/30 text-xs gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-xl shrink-0">🔔</span>
+                      <div className="text-[11px] text-slate-300 leading-tight">
+                        <span className="font-bold text-white block">Aviso automático en tu Teléfono</span>
+                        Activa las notificaciones permanentes para recibir alerta al confirmar y entregar tu pedido.
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleEnablePushPermanently}
+                      disabled={enablingPush}
+                      className="px-3 py-1.5 bg-[#FFF01F] hover:bg-yellow-300 text-black font-extrabold rounded-xl text-xs transition shadow-md shrink-0 flex items-center gap-1.5"
+                    >
+                      {enablingPush ? <Loader2 className="w-3.5 h-3.5 animate-spin text-black" /> : null}
+                      <span>Permitir</span>
+                    </button>
+                  </div>
+                )}
 
                 {/* Total Final y Botón de Confirmar Compra */}
                 <div className="pt-3 border-t border-white/10 flex items-center justify-between gap-3">

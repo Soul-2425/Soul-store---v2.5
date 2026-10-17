@@ -121,7 +121,6 @@ export async function PATCH(
               body: finalBody,
               url: "/",
               icon: "/icon.png",
-              badge: "/badge.png",
               tag: `order-delivered-${orderInfo.pedido_id}`,
             });
             console.log(`[Order Completion] Push personalizado enviado al cliente ${orderInfo.usuario_id}: ${sent}`);

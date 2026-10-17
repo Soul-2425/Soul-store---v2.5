@@ -10,8 +10,9 @@ self.addEventListener('activate', function (event) {
 self.addEventListener('push', function (event) {
   let title = '🟢 Soul Store • Nuevo Pedido';
   let body = 'Tienes una nueva actualización en tu pedido.';
-  let url = '/admin';
+  let url = '/';
   let tag = 'soul-' + Date.now();
+  let icon = '/icon.png';
 
   if (event.data) {
     try {
@@ -20,6 +21,7 @@ self.addEventListener('push', function (event) {
       if (data.body) body = data.body;
       if (data.url) url = data.url;
       if (data.tag) tag = data.tag;
+      if (data.icon) icon = data.icon;
     } catch (e) {
       const text = event.data.text();
       if (text) body = text;
@@ -28,9 +30,8 @@ self.addEventListener('push', function (event) {
 
   const options = {
     body: body,
-    icon: '/icon.png',
-    badge: '/badge.png',
-    vibrate: [300, 100, 300, 100, 300],
+    icon: icon,
+    vibrate: [200, 100, 200, 100, 200],
     tag: tag,
     renotify: true,
     requireInteraction: true,
@@ -41,9 +42,11 @@ self.addEventListener('push', function (event) {
   };
 
   event.waitUntil(
-    self.registration.showNotification(title, options).catch(function () {
+    self.registration.showNotification(title, options).catch(function (err) {
+      console.warn('[SW] Fallback notification due to:', err);
       return self.registration.showNotification(title, {
         body: body,
+        icon: '/icon.png',
         data: { url: url },
       });
     })

@@ -72,7 +72,6 @@ export async function POST(request: Request) {
       body: testBody,
       url: testUrl,
       icon: "/icon.png",
-      badge: "/badge.png",
       tag: `test-push-${Date.now()}`,
     });
 

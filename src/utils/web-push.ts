@@ -47,7 +47,6 @@ export async function sendPushNotification(userId: string | null | undefined, pa
       body: payload.body,
       url: payload.url || '/',
       icon: payload.icon || '/icon.png',
-      badge: payload.badge || '/badge.png',
       tag: payload.tag || `soul-notif-${Date.now()}`,
     };
 
@@ -100,6 +99,43 @@ export async function sendPushNotification(userId: string | null | undefined, pa
 }
 
 /**
+ * Enviar notificación push DIRECTAMENTE a un objeto PushSubscription del cliente
+ */
+export async function sendDirectPush(
+  subscription: { endpoint: string; keys: { p256dh: string; auth: string } },
+  payload: PushNotificationPayload
+) {
+  if (!subscription || !subscription.endpoint || !subscription.keys) return false;
+
+  try {
+    if (!ensureVapidConfig()) {
+      console.error('[WebPush] No se pudo inicializar la configuración VAPID para envío directo.');
+      return false;
+    }
+
+    const formattedPayload = {
+      title: payload.title || '🟢 Soul Store',
+      body: payload.body,
+      url: payload.url || '/',
+      icon: payload.icon || '/icon.png',
+      tag: payload.tag || `soul-direct-${Date.now()}`,
+    };
+
+    const pushOptions: webpush.RequestOptions = {
+      TTL: 86400,
+      urgency: 'high',
+    };
+
+    await webpush.sendNotification(subscription, JSON.stringify(formattedPayload), pushOptions);
+    console.log(`[WebPush] Notificación directa enviada con éxito a ${subscription.endpoint.slice(0, 35)}`);
+    return true;
+  } catch (error: any) {
+    console.error('[WebPush] Error enviando push directo a suscripción:', error?.message || error);
+    return false;
+  }
+}
+
+/**
  * Notificar a los administradores del sistema (estilo WhatsApp)
  */
 export async function notifyAdmins(payload: PushNotificationPayload) {
@@ -114,7 +150,6 @@ export async function notifyAdmins(payload: PushNotificationPayload) {
       body: payload.body,
       url: payload.url || '/admin',
       icon: payload.icon || '/icon.png',
-      badge: payload.badge || '/badge.png',
       tag: payload.tag || `admin-order-${Date.now()}`,
     };
 

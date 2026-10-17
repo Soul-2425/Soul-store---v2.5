@@ -134,6 +134,7 @@ export default function PushNotificationManager() {
         const sub = await registration.pushManager.getSubscription();
         if (sub) {
           localStorage.setItem("soul_push_endpoint", sub.endpoint);
+          localStorage.setItem("soul_push_permanent", "true");
           await fetch("/api/notifications/subscribe", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -152,6 +153,20 @@ export default function PushNotificationManager() {
     const res = await subscribeCurrentDevice(false);
     if (res.success) {
       setPermission("granted");
+      localStorage.setItem("soul_push_permanent", "true");
+
+      if (typeof window !== "undefined" && "serviceWorker" in navigator) {
+        navigator.serviceWorker.ready.then((reg) => {
+          if (reg && reg.showNotification) {
+            reg.showNotification("🟢 Soul Store • Alertas Activadas", {
+              body: "¡Notificaciones push permanentes activadas con éxito en tu dispositivo!",
+              icon: "/icon.png",
+              vibrate: [200, 100, 200],
+              tag: "soul-perm-init",
+            } as any);
+          }
+        }).catch(() => {});
+      }
     }
     setDismissed(true);
   };

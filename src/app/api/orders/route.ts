@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { createClient } from "@/lib/supabase/server";
-import { notifyAdmins } from "@/utils/web-push";
+import { notifyAdmins, sendPushNotification, sendDirectPush } from "@/utils/web-push";
 import { interpolateTemplate, DEFAULT_NOTIFICATION_TEMPLATES } from "@/utils/notifications-template";
 export async function POST(request: Request) {
   try {
@@ -357,7 +357,33 @@ export async function POST(request: Request) {
       }
     }
 
-    // Notificar a los administradores con plantilla personalizable (await obligatorio en Serverless)
+    const orderNumber = `SOUL-${pedido.id.slice(0, 8).toUpperCase()}`;
+
+    // 1. Notificar inmediatamente al CLIENTE en su dispositivo
+    try {
+      const clientPayload = {
+        title: `🟢 ¡Pedido Confirmado con Éxito! • ${orderNumber}`,
+        body: `Tu recarga de ${producto.nombre}${variantName ? ` (${variantName})` : ""} ha sido registrada y está en cola de despacho prioritario.`,
+        url: `/?order=${orderNumber}`,
+        icon: "/icon.png",
+        tag: `client-order-${pedido.id}`,
+      };
+
+      // Si el cliente envió suscripción directa desde su navegador, enviar sin demoras
+      if (pushSub && pushSub.endpoint && pushSub.keys) {
+        await sendDirectPush(pushSub, clientPayload);
+      }
+
+      // Enviar a todas las suscripciones vinculadas a su usuario
+      if (finalUserId) {
+        await sendPushNotification(finalUserId, clientPayload);
+      }
+      console.log(`[WebPush] Notificación push de confirmación enviada al cliente para ${orderNumber}`);
+    } catch (clientPushErr) {
+      console.error("[WebPush] Error enviando notificación push al cliente:", clientPushErr);
+    }
+
+    // 2. Notificar a los administradores con plantilla personalizable (await obligatorio en Serverless)
     try {
       const [cfg] = await sql`
         SELECT admin_titulo_template, admin_cuerpo_template, admin_url_template
@@ -372,7 +398,7 @@ export async function POST(request: Request) {
         producto: producto.nombre,
         variante: variantName || "",
         cliente: safeNombre,
-        pedido_id: `SOUL-${pedido.id.slice(0, 8).toUpperCase()}`,
+        pedido_id: orderNumber,
         monto: precioUsd,
         moneda: safeMoneda,
         metodo_pago: safeMetodoPagoNombre || "Transferencia",
@@ -389,7 +415,6 @@ export async function POST(request: Request) {
         body: finalBody,
         url: finalUrl,
         icon: "/icon.png",
-        badge: "/badge.png",
         tag: `new-order-${pedido.id}`,
       });
       console.log(`[WebPush] Notificación de nuevo pedido enviada a administradores: "${finalTitle}"`);
@@ -401,7 +426,7 @@ export async function POST(request: Request) {
       {
         success: true,
         orderId: pedido.id,
-        orderNumber: `SOUL-${pedido.id.slice(0, 8).toUpperCase()}`,
+        orderNumber: orderNumber,
         status: pedido.estado,
         totalUsd: precioUsd,
         totalLocal: moneda_pago === "VES" ? totalVes : moneda_pago === "MXN" ? totalMxn : precioUsd,
