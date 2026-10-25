@@ -266,12 +266,6 @@ export default function StorefrontClient({
   const [contactModalOpen, setContactModalOpen] = useState(false);
   const [cartModalOpen, setCartModalOpen] = useState(false);
 
-  const [feedItems, setFeedItems] = useState<FeedItem[]>([]);
-  const [likedFeedIds, setLikedFeedIds] = useState<Set<string>>(new Set());
-  const [expandedComments, setExpandedComments] = useState<Record<string, boolean>>({});
-  const [newCommentText, setNewCommentText] = useState<Record<string, string>>({});
-  const [commentAuthor, setCommentAuthor] = useState("");
-  const [submittingComment, setSubmittingComment] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(initialUser);
 
   // Paginación del Catálogo
@@ -281,133 +275,6 @@ export default function StorefrontClient({
   const [copiedLink, setCopiedLink] = useState<string | null>(null);
 
   const supabase = createClient();
-
-  // Cargar likes guardados localmente
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const savedLikes = JSON.parse(localStorage.getItem("soul_feed_likes") || "[]");
-        setLikedFeedIds(new Set(savedLikes));
-      } catch {}
-    }
-  }, []);
-
-  const fetchFeed = async () => {
-    try {
-      const res = await fetch("/api/feed");
-      const d = await res.json();
-      if (d.feed && Array.isArray(d.feed) && d.feed.length > 0) {
-        setFeedItems(d.feed);
-      }
-    } catch (err) {
-      console.warn("Error cargando feed:", err);
-    }
-  };
-
-  useEffect(() => {
-    fetchFeed();
-  }, []);
-
-  const handleToggleLike = async (item: FeedItem) => {
-    const isCurrentlyLiked = likedFeedIds.has(item.id);
-    const newLiked = new Set(likedFeedIds);
-    if (isCurrentlyLiked) {
-      newLiked.delete(item.id);
-    } else {
-      newLiked.add(item.id);
-    }
-    setLikedFeedIds(newLiked);
-    if (typeof window !== "undefined") {
-      localStorage.setItem("soul_feed_likes", JSON.stringify(Array.from(newLiked)));
-    }
-
-    // Actualización optimista del contador
-    setFeedItems((prev) =>
-      prev.map((f) =>
-        f.id === item.id
-          ? {
-              ...f,
-              likes_count: isCurrentlyLiked
-                ? Math.max(0, (f.likes_count || 0) - 1)
-                : (f.likes_count || 0) + 1,
-            }
-          : f
-      )
-    );
-
-    let clientId = currentUser?.id;
-    if (!clientId && typeof window !== "undefined") {
-      clientId = localStorage.getItem("soul_client_ident") || "";
-      if (!clientId) {
-        clientId = "client_" + Math.random().toString(36).substring(2, 11);
-        localStorage.setItem("soul_client_ident", clientId);
-      }
-    }
-
-    try {
-      const res = await fetch("/api/feed/like", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          feed_id: item.id,
-          identificador: clientId || "guest_device",
-        }),
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setFeedItems((prev) =>
-          prev.map((f) => (f.id === item.id ? { ...f, likes_count: data.likes_count } : f))
-        );
-      }
-    } catch (e) {
-      console.error("Error toggling like:", e);
-    }
-  };
-
-  const handlePostComment = async (feedId: string) => {
-    const text = (newCommentText[feedId] || "").trim();
-    if (!text) return;
-
-    const author =
-      commentAuthor.trim() ||
-      currentUser?.nickname ||
-      currentUser?.nombre ||
-      "Cliente";
-
-    setSubmittingComment(feedId);
-
-    try {
-      const res = await fetch("/api/feed/comment", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          feed_id: feedId,
-          autor_nombre: author,
-          comentario: text,
-          usuario_id: currentUser?.id,
-        }),
-      });
-
-      const data = await res.json();
-      if (res.ok && data.success && data.comment) {
-        setFeedItems((prev) =>
-          prev.map((f) =>
-            f.id === feedId
-              ? {
-                  ...f,
-                  comentarios: [...(f.comentarios || []), data.comment],
-                }
-              : f
-          )
-        );
-        setNewCommentText((prev) => ({ ...prev, [feedId]: "" }));
-      }
-    } catch (e) {
-      console.error("Error posting comment:", e);
-    } finally {
-      setSubmittingComment(null);
-    }
-  };
 
   useEffect(() => {
     const checkSession = async () => {
@@ -779,13 +646,13 @@ export default function StorefrontClient({
               <span className="text-white">Inicio</span>
               <span className="w-7 h-0.5 bg-[#FF007F] rounded-full mt-1 shadow-[0_0_8px_#FF007F]"></span>
             </a>
-            <a 
-              href="#feed" 
+            <Link 
+              href="/feed" 
               className="text-zinc-300 hover:text-[#FFF01F] transition flex items-center gap-1.5"
             >
               <span>Feed & Opiniones</span>
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-            </a>
+            </Link>
             <button 
               onClick={() => setContactModalOpen(true)}
               className="text-zinc-300 hover:text-white transition"
@@ -977,6 +844,17 @@ export default function StorefrontClient({
               <span>Inicio</span>
               <span className="w-2 h-2 rounded-full bg-[#FF007F]"></span>
             </a>
+            <Link 
+              href="/feed" 
+              onClick={() => setMobileMenuOpen(false)}
+              className="text-white/90 flex items-center justify-between p-2 rounded-xl hover:bg-white/5 transition"
+            >
+              <div className="flex items-center gap-2">
+                <span>Feed & Opiniones</span>
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              </div>
+              <span className="text-[10px] uppercase font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">En vivo</span>
+            </Link>
             <button 
               onClick={() => { setMobileMenuOpen(false); setContactModalOpen(true); }}
               className="text-left text-white/90 p-2 rounded-xl hover:bg-white/5 transition"
@@ -2013,200 +1891,7 @@ export default function StorefrontClient({
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* 7.5 SECCIÓN DE FEED DE ENTREGAS & OPINIONES                                */}
-      {/* ========================================================================= */}
-      <section id="feed" className="max-w-6xl mx-auto px-4 mt-24 mb-16 scroll-mt-24">
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
-          <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-mono text-xs font-bold mb-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-              <span>ENTREGAS VERIFICADAS EN VIVO</span>
-            </div>
-            <h2 className="text-2xl sm:text-3xl font-black text-white uppercase tracking-tight flex items-center gap-2.5">
-              <span>Feed de Entregas & Reseñas</span>
-              <span className="text-[#FFF01F]">⚡</span>
-            </h2>
-            <p className="text-xs sm:text-sm text-zinc-400 mt-1 max-w-xl">
-              Comprueba en tiempo real los pedidos despachados con éxito. ¡Deja tu like de apoyo y comparte tu opinión!
-            </p>
-          </div>
-          <button
-            onClick={fetchFeed}
-            className="self-start sm:self-auto px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-bold text-zinc-300 hover:text-white border border-white/10 transition flex items-center gap-1.5"
-          >
-            <span>🔄 Actualizar Feed</span>
-          </button>
-        </div>
 
-        {feedItems.length === 0 ? (
-          <div className="p-8 rounded-3xl bg-[#0B0D13]/70 border border-white/10 text-center">
-            <p className="text-sm text-zinc-400">Aún no hay entregas publicadas. ¡Sé el primero en recargar!</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {feedItems.map((item) => {
-              const isLiked = likedFeedIds.has(item.id);
-              const isCommentsOpen = Boolean(expandedComments[item.id]);
-              const commentsCount = item.comentarios?.length || 0;
-
-              return (
-                <div
-                  key={item.id}
-                  className="bg-[#0B0D13]/85 backdrop-blur-md border border-white/10 hover:border-purple-500/40 rounded-3xl p-5 shadow-2xl transition-all duration-300 flex flex-col justify-between gap-4 hover:shadow-purple-500/10"
-                >
-                  {/* Top: Avatar, Nickname y Badge */}
-                  <div>
-                    <div className="flex items-center justify-between gap-2 mb-3">
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-[#D61A1A] to-[#FFF01F] p-0.5 shrink-0 shadow-md">
-                          <div className="w-full h-full bg-[#0B0D13] rounded-[14px] flex items-center justify-center font-black text-xs text-[#FFF01F]">
-                            {item.nickname_anonimo ? item.nickname_anonimo[0].toUpperCase() : "S"}
-                          </div>
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-xs font-black text-white truncate">
-                            {item.nickname_anonimo || "Cliente Verificado"}
-                          </p>
-                          <span className="text-[10px] text-zinc-500 font-mono block">
-                            {new Date(item.creado_en).toLocaleDateString("es-ES", {
-                              day: "2-digit",
-                              month: "short",
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
-                          </span>
-                        </div>
-                      </div>
-
-                      <span className="px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-[10px] font-bold font-mono text-emerald-400 inline-flex items-center gap-1 shrink-0">
-                        <Check className="w-3 h-3 stroke-[3]" />
-                        <span>Entregado</span>
-                      </span>
-                    </div>
-
-                    {/* Descripción de la Recarga / Entrega */}
-                    <div className="p-3 rounded-2xl bg-white/[0.03] border border-white/5 mb-2">
-                      <span className="text-[10px] font-mono uppercase text-zinc-500 block mb-0.5">Recarga Despachada:</span>
-                      <p className="text-sm font-black text-[#FFF01F] tracking-tight">
-                        {item.descripcion_entrega}
-                      </p>
-                    </div>
-
-                    {/* Comentario del Cliente (si existe) */}
-                    {item.comentario_cliente && (
-                      <p className="text-xs text-zinc-300 italic bg-purple-950/20 border border-purple-500/20 p-2.5 rounded-xl mb-2">
-                        "{item.comentario_cliente}"
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Acciones: Likes y Comentarios */}
-                  <div className="pt-3 border-t border-white/10 space-y-3">
-                    <div className="flex items-center justify-between">
-                      {/* Botón de Like */}
-                      <button
-                        type="button"
-                        onClick={() => handleToggleLike(item)}
-                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition ${
-                          isLiked
-                            ? "bg-rose-500/20 text-rose-400 border border-rose-500/40 shadow-md shadow-rose-500/10 scale-105"
-                            : "bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white border border-white/5"
-                        }`}
-                      >
-                        <Heart className={`w-4 h-4 ${isLiked ? "fill-rose-400 text-rose-400" : ""}`} />
-                        <span>{item.likes_count || 0}</span>
-                      </button>
-
-                      {/* Botón para desplegar comentarios */}
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setExpandedComments((prev) => ({
-                            ...prev,
-                            [item.id]: !prev[item.id],
-                          }))
-                        }
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-white/5 hover:bg-white/10 text-zinc-300 hover:text-white border border-white/5 transition"
-                      >
-                        <MessageSquare className="w-3.5 h-3.5" />
-                        <span>{commentsCount} {commentsCount === 1 ? "Comentario" : "Comentarios"}</span>
-                        <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isCommentsOpen ? "rotate-180" : ""}`} />
-                      </button>
-                    </div>
-
-                    {/* Desplegable de Comentarios */}
-                    {isCommentsOpen && (
-                      <div className="space-y-3 pt-2 border-t border-white/5 animate-in fade-in duration-200">
-                        {/* Lista de comentarios existentes */}
-                        {item.comentarios && item.comentarios.length > 0 ? (
-                          <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                            {item.comentarios.map((c) => (
-                              <div
-                                key={c.id}
-                                className="p-2.5 rounded-xl bg-black/40 border border-white/5 text-xs text-left"
-                              >
-                                <div className="flex items-center justify-between text-[10px] text-zinc-400 mb-1">
-                                  <span className="font-bold text-white">{c.autor_nombre}</span>
-                                  <span>{new Date(c.creado_en).toLocaleDateString("es-ES", { hour: "2-digit", minute: "2-digit" })}</span>
-                                </div>
-                                <p className="text-zinc-300">{c.comentario}</p>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <p className="text-[11px] text-zinc-500 text-center py-1">
-                            Aún no hay comentarios. ¡Sé el primero en opinar!
-                          </p>
-                        )}
-
-                        {/* Input para agregar nuevo comentario */}
-                        <div className="space-y-2 pt-1">
-                          {!currentUser && (
-                            <input
-                              type="text"
-                              value={commentAuthor}
-                              onChange={(e) => setCommentAuthor(e.target.value)}
-                              placeholder="Tu nombre o apodo (opcional)"
-                              className="w-full px-3 py-1.5 rounded-xl bg-black/60 border border-white/10 text-xs text-white placeholder-zinc-500 outline-none focus:border-[#FFF01F]"
-                            />
-                          )}
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="text"
-                              value={newCommentText[item.id] || ""}
-                              onChange={(e) =>
-                                setNewCommentText((prev) => ({
-                                  ...prev,
-                                  [item.id]: e.target.value,
-                                }))
-                              }
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") handlePostComment(item.id);
-                              }}
-                              placeholder="Escribe una opinión..."
-                              className="flex-1 px-3 py-1.5 rounded-xl bg-black/60 border border-white/10 text-xs text-white placeholder-zinc-500 outline-none focus:border-[#FFF01F]"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => handlePostComment(item.id)}
-                              disabled={submittingComment === item.id || !newCommentText[item.id]?.trim()}
-                              className="px-3 py-1.5 rounded-xl bg-[#FFF01F] hover:bg-yellow-300 disabled:opacity-40 text-black font-extrabold text-xs transition shadow shrink-0 flex items-center gap-1"
-                            >
-                              <Send className="w-3 h-3" />
-                              <span>Enviar</span>
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </section>
 
       {/* ========================================================================= */}
       {/* 8. FOOTER                                                                 */}
