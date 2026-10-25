@@ -90,10 +90,28 @@ export async function PATCH(
             ? `${rawNick[0]}...${rawNick.slice(-2)}`
             : `${rawNick[0]}...`;
 
-        await sql`
-          INSERT INTO public.feed_entregas (pedido_id, pedido_item_id, nickname_anonimo, descripcion_entrega, aprobado_admin)
-          VALUES (${orderInfo.pedido_id}, ${orderInfo.item_id}, ${anonNick}, ${orderInfo.producto_nombre}, TRUE)
+        const descEntrega = orderInfo.variante_nombre 
+          ? `${orderInfo.producto_nombre} (${orderInfo.variante_nombre})` 
+          : orderInfo.producto_nombre;
+
+        const feedAprobado = typeof body.publicar_en_feed === "boolean" ? body.publicar_en_feed : true;
+        const [existingFeed] = await sql`
+          SELECT id FROM public.feed_entregas WHERE pedido_item_id = ${orderInfo.item_id}::uuid LIMIT 1
         `;
+
+        if (existingFeed) {
+          await sql`
+            UPDATE public.feed_entregas
+            SET aprobado_admin = ${feedAprobado},
+                descripcion_entrega = ${descEntrega}
+            WHERE id = ${existingFeed.id}::uuid
+          `;
+        } else {
+          await sql`
+            INSERT INTO public.feed_entregas (pedido_id, pedido_item_id, nickname_anonimo, descripcion_entrega, aprobado_admin)
+            VALUES (${orderInfo.pedido_id}, ${orderInfo.item_id}, ${anonNick}, ${descEntrega}, ${feedAprobado})
+          `;
+        }
 
         if (orderInfo.usuario_id) {
           // Notificar al cliente con plantilla personalizable (await obligatorio en Serverless)

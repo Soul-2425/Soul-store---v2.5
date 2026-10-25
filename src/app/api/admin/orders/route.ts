@@ -33,11 +33,14 @@ export async function GET() {
         pi.costo_proveedor,
         pi.datos_dinamicos,
         prod.nombre as producto_nombre,
-        prod.id as producto_id
+        prod.id as producto_id,
+        fe.id as feed_id,
+        COALESCE(fe.aprobado_admin, false) as feed_aprobado
       FROM public.pedidos p
       JOIN public.usuarios u ON p.usuario_id = u.id
       JOIN public.pedidos_items pi ON pi.pedido_id = p.id
       JOIN public.productos prod ON pi.producto_id = prod.id
+      LEFT JOIN public.feed_entregas fe ON fe.pedido_item_id = pi.id
       ORDER BY p.creado_en DESC
     `;
 

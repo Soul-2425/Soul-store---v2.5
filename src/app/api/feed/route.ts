@@ -3,19 +3,36 @@ import { sql } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
-// GET: Retornar las entregas aprobadas más recientes para la marquesina pública de la tienda
+// GET: Retornar las entregas aprobadas con sus likes y comentarios para el Feed público
 export async function GET() {
   try {
     const items = await sql`
       SELECT 
-        id, 
-        nickname_anonimo, 
-        descripcion_entrega, 
-        creado_en
-      FROM public.feed_entregas
-      WHERE aprobado_admin = TRUE
-      ORDER BY creado_en DESC
-      LIMIT 15
+        fe.id, 
+        fe.nickname_anonimo, 
+        fe.descripcion_entrega, 
+        fe.comentario_cliente,
+        COALESCE(fe.likes_count, 0)::int as likes_count,
+        fe.creado_en,
+        COALESCE(
+          (
+            SELECT json_agg(
+              json_build_object(
+                'id', fc.id,
+                'autor_nombre', fc.autor_nombre,
+                'comentario', fc.comentario,
+                'creado_en', fc.creado_en
+              ) ORDER BY fc.creado_en ASC
+            )
+            FROM public.feed_comentarios fc
+            WHERE fc.feed_id = fe.id
+          ),
+          '[]'::json
+        ) as comentarios
+      FROM public.feed_entregas fe
+      WHERE fe.aprobado_admin = TRUE
+      ORDER BY fe.creado_en DESC
+      LIMIT 20
     `;
 
     return NextResponse.json({ feed: items });

@@ -173,6 +173,8 @@ interface AdminOrder {
   comprobante_url?: string | null;
   referencia_pago?: string | null;
   datos_dinamicos?: Record<string, string>;
+  feed_id?: string | null;
+  feed_aprobado?: boolean;
 }
 
 interface PaymentFieldItem {
@@ -715,6 +717,13 @@ export default function AdminDashboardPage() {
 
   const handleUpdateOrderStatus = async (orderId: string, itemId: string, newStatus: string) => {
     try {
+      let publicarEnFeed = true;
+      if (newStatus === "ENTREGADO") {
+        publicarEnFeed = window.confirm(
+          "¿Deseas publicar esta entrega en el Feed de la tienda para que los clientes puedan verla, darle like y comentar?\n\n(Puedes cambiarlo u ocultarlo en cualquier momento desde el botón Feed)"
+        );
+      }
+
       const res = await fetch(`/api/admin/orders/${orderId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -722,6 +731,7 @@ export default function AdminDashboardPage() {
           item_id: itemId,
           estado_item: newStatus,
           estado_pedido: newStatus === "ENTREGADO" ? "COMPLETADO" : newStatus === "FALLIDO" ? "CANCELADO" : "PROCESANDO",
+          publicar_en_feed: publicarEnFeed,
         }),
       });
       if (res.ok) {
@@ -732,6 +742,41 @@ export default function AdminDashboardPage() {
       }
     } catch {
       showNotification("error", "Error de red al actualizar pedido.");
+    }
+  };
+
+  const handleToggleFeedApproval = async (order: AdminOrder) => {
+    try {
+      const res = await fetch("/api/admin/feed/toggle", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          feed_id: order.feed_id || undefined,
+          order_item_id: order.item_id,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showNotification("success", data.message);
+        setOrders((prev) =>
+          prev.map((o) =>
+            o.item_id === order.item_id
+              ? { ...o, feed_id: data.feed_id, feed_aprobado: data.aprobado_admin }
+              : o
+          )
+        );
+        if (selectedOrderDetails && selectedOrderDetails.item_id === order.item_id) {
+          setSelectedOrderDetails({
+            ...selectedOrderDetails,
+            feed_id: data.feed_id,
+            feed_aprobado: data.aprobado_admin,
+          });
+        }
+      } else {
+        showNotification("error", data.error || "No se pudo cambiar el estado en el feed.");
+      }
+    } catch {
+      showNotification("error", "Error de conexión al actualizar el feed.");
     }
   };
 
@@ -2716,25 +2761,42 @@ export default function AdminDashboardPage() {
                             )}
                           </div>
 
-                          {/* Selector rápido de estado en móvil */}
-                          <select
-                            value={o.item_estado}
-                            onChange={(e) => handleUpdateOrderStatus(o.id, o.item_id, e.target.value)}
-                            className={`px-2 py-1 rounded-lg font-mono text-xs font-bold outline-none cursor-pointer border ${
-                              o.item_estado === "ENTREGADO"
-                                ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
-                                : o.item_estado === "PROCESANDO"
-                                ? "bg-cyan-500/20 text-cyan-300 border-cyan-500/40"
-                                : o.item_estado === "FALLIDO"
-                                ? "bg-red-500/20 text-red-300 border-red-500/40"
-                                : "bg-amber-500/20 text-amber-300 border-amber-500/40"
-                            }`}
-                          >
-                            <option value="EN_COLA" className="bg-slate-900 text-amber-300">EN_COLA</option>
-                            <option value="PROCESANDO" className="bg-slate-900 text-cyan-300">PROCESANDO</option>
-                            <option value="ENTREGADO" className="bg-slate-900 text-emerald-300">ENTREGADO</option>
-                            <option value="FALLIDO" className="bg-slate-900 text-red-300">FALLIDO</option>
-                          </select>
+                          {/* Selector rápido de estado en móvil y control de Feed */}
+                          <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                            <select
+                              value={o.item_estado}
+                              onChange={(e) => handleUpdateOrderStatus(o.id, o.item_id, e.target.value)}
+                              className={`px-2 py-1 rounded-lg font-mono text-xs font-bold outline-none cursor-pointer border ${
+                                o.item_estado === "ENTREGADO"
+                                  ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                                  : o.item_estado === "PROCESANDO"
+                                  ? "bg-cyan-500/20 text-cyan-300 border-cyan-500/40"
+                                  : o.item_estado === "FALLIDO"
+                                  ? "bg-red-500/20 text-red-300 border-red-500/40"
+                                  : "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                              }`}
+                            >
+                              <option value="EN_COLA" className="bg-slate-900 text-amber-300">EN_COLA</option>
+                              <option value="PROCESANDO" className="bg-slate-900 text-cyan-300">PROCESANDO</option>
+                              <option value="ENTREGADO" className="bg-slate-900 text-emerald-300">ENTREGADO</option>
+                              <option value="FALLIDO" className="bg-slate-900 text-red-300">FALLIDO</option>
+                            </select>
+
+                            {(o.item_estado === "ENTREGADO" || o.feed_id) && (
+                              <button
+                                type="button"
+                                onClick={() => handleToggleFeedApproval(o)}
+                                title={o.feed_aprobado ? "Publicado en el Feed de clientes (Click para pausar)" : "Oculto en el Feed (Click para publicar)"}
+                                className={`px-2 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 border transition-all ${
+                                  o.feed_aprobado
+                                    ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/50 hover:bg-emerald-500/30 shadow-[0_0_10px_rgba(16,185,129,0.3)]"
+                                    : "bg-slate-800 text-slate-400 border-slate-700 hover:text-slate-200 hover:border-slate-500"
+                                }`}
+                              >
+                                {o.feed_aprobado ? "📢 Feed" : "💤 Oculto"}
+                              </button>
+                            )}
+                          </div>
                         </div>
 
                         {/* Fila 2: Cliente, Producto y Total Pagado */}
@@ -2930,24 +2992,41 @@ export default function AdminDashboardPage() {
                             )}
                           </td>
                           <td className="py-3.5 px-4">
-                            <select
-                              value={o.item_estado}
-                              onChange={(e) => handleUpdateOrderStatus(o.id, o.item_id, e.target.value)}
-                              className={`px-2.5 py-1 rounded-lg font-mono text-xs font-bold outline-none cursor-pointer border ${
-                                o.item_estado === "ENTREGADO"
-                                  ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
-                                  : o.item_estado === "PROCESANDO"
-                                  ? "bg-cyan-500/20 text-cyan-300 border-cyan-500/40"
-                                  : o.item_estado === "FALLIDO"
-                                  ? "bg-red-500/20 text-red-300 border-red-500/40"
-                                  : "bg-amber-500/20 text-amber-300 border-amber-500/40"
-                              }`}
-                            >
-                              <option value="EN_COLA" className="bg-slate-900 text-amber-300">EN_COLA</option>
-                              <option value="PROCESANDO" className="bg-slate-900 text-cyan-300">PROCESANDO</option>
-                              <option value="ENTREGADO" className="bg-slate-900 text-emerald-300">ENTREGADO</option>
-                              <option value="FALLIDO" className="bg-slate-900 text-red-300">FALLIDO</option>
-                            </select>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <select
+                                value={o.item_estado}
+                                onChange={(e) => handleUpdateOrderStatus(o.id, o.item_id, e.target.value)}
+                                className={`px-2.5 py-1 rounded-lg font-mono text-xs font-bold outline-none cursor-pointer border ${
+                                  o.item_estado === "ENTREGADO"
+                                    ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                                    : o.item_estado === "PROCESANDO"
+                                    ? "bg-cyan-500/20 text-cyan-300 border-cyan-500/40"
+                                    : o.item_estado === "FALLIDO"
+                                    ? "bg-red-500/20 text-red-300 border-red-500/40"
+                                    : "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                                }`}
+                              >
+                                <option value="EN_COLA" className="bg-slate-900 text-amber-300">EN_COLA</option>
+                                <option value="PROCESANDO" className="bg-slate-900 text-cyan-300">PROCESANDO</option>
+                                <option value="ENTREGADO" className="bg-slate-900 text-emerald-300">ENTREGADO</option>
+                                <option value="FALLIDO" className="bg-slate-900 text-red-300">FALLIDO</option>
+                              </select>
+
+                              {(o.item_estado === "ENTREGADO" || o.feed_id) && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleFeedApproval(o)}
+                                  title={o.feed_aprobado ? "Publicado en el Feed de clientes (Click para ocultar)" : "Oculto en el Feed (Click para publicar)"}
+                                  className={`px-2 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 border transition-all ${
+                                    o.feed_aprobado
+                                      ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/50 hover:bg-emerald-500/30 shadow-[0_0_10px_rgba(16,185,129,0.3)]"
+                                      : "bg-slate-800 text-slate-400 border-slate-700 hover:text-slate-200 hover:border-slate-500"
+                                  }`}
+                                >
+                                  {o.feed_aprobado ? "📢 Feed" : "💤 Oculto"}
+                                </button>
+                              )}
+                            </div>
                           </td>
                           <td className="py-3.5 px-4 text-right">
                             <a
@@ -8009,31 +8088,48 @@ export default function AdminDashboardPage() {
               </button>
             </div>
 
-            {/* Estado de la Orden con Selector Directo */}
-            <div className="p-3 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-between gap-3">
+            {/* Estado de la Orden con Selector Directo y Botón de Feed */}
+            <div className="p-3 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-between gap-3 flex-wrap">
               <span className="text-xs font-mono text-slate-300 font-bold uppercase">Estado de Entrega:</span>
-              <select
-                value={selectedOrderDetails.item_estado}
-                onChange={(e) => {
-                  const newStatus = e.target.value;
-                  handleUpdateOrderStatus(selectedOrderDetails.id, selectedOrderDetails.item_id, newStatus);
-                  setSelectedOrderDetails({ ...selectedOrderDetails, item_estado: newStatus });
-                }}
-                className={`px-3 py-1.5 rounded-xl font-mono text-xs font-bold outline-none cursor-pointer border ${
-                  selectedOrderDetails.item_estado === "ENTREGADO"
-                    ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
-                    : selectedOrderDetails.item_estado === "PROCESANDO"
-                    ? "bg-cyan-500/20 text-cyan-300 border-cyan-500/40"
-                    : selectedOrderDetails.item_estado === "FALLIDO"
-                    ? "bg-red-500/20 text-red-300 border-red-500/40"
-                    : "bg-amber-500/20 text-amber-300 border-amber-500/40"
-                }`}
-              >
-                <option value="EN_COLA" className="bg-slate-900 text-amber-300">EN_COLA</option>
-                <option value="PROCESANDO" className="bg-slate-900 text-cyan-300">PROCESANDO</option>
-                <option value="ENTREGADO" className="bg-slate-900 text-emerald-300">ENTREGADO</option>
-                <option value="FALLIDO" className="bg-slate-900 text-red-300">FALLIDO</option>
-              </select>
+              <div className="flex items-center gap-2">
+                <select
+                  value={selectedOrderDetails.item_estado}
+                  onChange={(e) => {
+                    const newStatus = e.target.value;
+                    handleUpdateOrderStatus(selectedOrderDetails.id, selectedOrderDetails.item_id, newStatus);
+                    setSelectedOrderDetails({ ...selectedOrderDetails, item_estado: newStatus });
+                  }}
+                  className={`px-3 py-1.5 rounded-xl font-mono text-xs font-bold outline-none cursor-pointer border ${
+                    selectedOrderDetails.item_estado === "ENTREGADO"
+                      ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                      : selectedOrderDetails.item_estado === "PROCESANDO"
+                      ? "bg-cyan-500/20 text-cyan-300 border-cyan-500/40"
+                      : selectedOrderDetails.item_estado === "FALLIDO"
+                      ? "bg-red-500/20 text-red-300 border-red-500/40"
+                      : "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                  }`}
+                >
+                  <option value="EN_COLA" className="bg-slate-900 text-amber-300">EN_COLA</option>
+                  <option value="PROCESANDO" className="bg-slate-900 text-cyan-300">PROCESANDO</option>
+                  <option value="ENTREGADO" className="bg-slate-900 text-emerald-300">ENTREGADO</option>
+                  <option value="FALLIDO" className="bg-slate-900 text-red-300">FALLIDO</option>
+                </select>
+
+                {(selectedOrderDetails.item_estado === "ENTREGADO" || selectedOrderDetails.feed_id) && (
+                  <button
+                    type="button"
+                    onClick={() => handleToggleFeedApproval(selectedOrderDetails)}
+                    title={selectedOrderDetails.feed_aprobado ? "Publicado en el Feed de clientes (Click para ocultar)" : "Oculto en el Feed (Click para publicar)"}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 border transition-all ${
+                      selectedOrderDetails.feed_aprobado
+                        ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/50 hover:bg-emerald-500/30 shadow-[0_0_10px_rgba(16,185,129,0.3)]"
+                        : "bg-slate-800 text-slate-400 border-slate-700 hover:text-slate-200 hover:border-slate-500"
+                    }`}
+                  >
+                    {selectedOrderDetails.feed_aprobado ? "📢 Feed: Activo" : "💤 Feed: Oculto"}
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Bloque 1: Datos del Cliente */}
