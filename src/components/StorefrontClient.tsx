@@ -342,91 +342,267 @@ export default function StorefrontClient({
     return () => window.removeEventListener("focus", onFocus);
   }, []);
 
-  // Detección inicial de URL para deep linking directo de productos, variantes o categorías
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      const catParam = params.get("categoria");
-      const subParam = params.get("subcategoria");
-      const prodParam = params.get("producto");
-      const varParam = params.get("variante");
+  // Funciones auxiliares para generar y encontrar slugs limpios y legibles en el enlace
+  const slugifyText = (text: string) => {
+    return text
+      .toLowerCase()
+      .trim()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+  };
 
-      if (catParam) {
-        const foundCat = categoriesList.find(c => c.slug === catParam || c.id === catParam);
-        if (foundCat) {
-          setActiveCategoryFilter(foundCat.id);
-          setCatalogViewMode("categories");
-          if (subParam) {
-            const foundSub = subcategoriesList.find(s => s.slug === subParam || s.id === subParam);
-            if (foundSub) {
-              setActiveSubcategoryFilter(foundSub.id);
-            } else {
-              setActiveSubcategoryFilter("all");
-            }
-          } else {
-            setActiveSubcategoryFilter(null);
-          }
-        }
-      } else if (subParam) {
-        const foundSub = subcategoriesList.find(s => s.slug === subParam || s.id === subParam);
-        if (foundSub) {
-          setActiveCategoryFilter(foundSub.categoria_id);
-          setActiveSubcategoryFilter(foundSub.id);
-          setCatalogViewMode("categories");
-        }
+  const getCategorySlug = (cat?: Category | null) => {
+    if (!cat) return "";
+    if (cat.slug && cat.slug.trim()) return cat.slug.trim().toLowerCase();
+    return slugifyText(cat.nombre) || cat.id;
+  };
+
+  const getSubcategorySlug = (sub?: Subcategory | null) => {
+    if (!sub) return "";
+    if (sub.slug && sub.slug.trim()) return sub.slug.trim().toLowerCase();
+    return slugifyText(sub.nombre) || sub.id;
+  };
+
+  const getProductSlug = (prod?: Product | null) => {
+    if (!prod) return "";
+    if (prod.slug && prod.slug.trim()) return prod.slug.trim().toLowerCase();
+    return slugifyText(prod.nombre) || prod.id;
+  };
+
+  const getVariantSlug = (v?: ProductVariant | null) => {
+    if (!v) return "";
+    if (v.sku && v.sku.trim()) return v.sku.trim().toLowerCase();
+    return slugifyText(v.nombre) || v.id;
+  };
+
+  const matchCategory = (param: string, list: Category[]) => {
+    if (!param) return undefined;
+    const clean = decodeURIComponent(param).toLowerCase().trim();
+    return list.find(
+      (c) =>
+        c.id.toLowerCase() === clean ||
+        (c.slug && c.slug.toLowerCase() === clean) ||
+        getCategorySlug(c) === clean ||
+        slugifyText(c.nombre) === clean
+    );
+  };
+
+  const matchSubcategory = (param: string, list: Subcategory[], categoryId?: string) => {
+    if (!param) return undefined;
+    const clean = decodeURIComponent(param).toLowerCase().trim();
+    return list.find((s) => {
+      const matchesCat = !categoryId || s.categoria_id === categoryId;
+      return (
+        matchesCat &&
+        (s.id.toLowerCase() === clean ||
+          (s.slug && s.slug.toLowerCase() === clean) ||
+          getSubcategorySlug(s) === clean ||
+          slugifyText(s.nombre) === clean)
+      );
+    });
+  };
+
+  const matchProduct = (param: string, list: Product[]) => {
+    if (!param) return undefined;
+    const clean = decodeURIComponent(param).toLowerCase().trim();
+    return list.find(
+      (p) =>
+        p.id.toLowerCase() === clean ||
+        (p.slug && p.slug.toLowerCase() === clean) ||
+        getProductSlug(p) === clean ||
+        slugifyText(p.nombre) === clean
+    );
+  };
+
+  const matchVariant = (param: string, list: ProductVariant[], productId?: string) => {
+    if (!param) return undefined;
+    const clean = decodeURIComponent(param).toLowerCase().trim();
+    return list.find((v) => {
+      const matchesProd = !productId || v.producto_id === productId;
+      return (
+        matchesProd &&
+        (v.id.toLowerCase() === clean ||
+          (v.sku && v.sku.toLowerCase() === clean) ||
+          getVariantSlug(v) === clean ||
+          slugifyText(v.nombre) === clean)
+      );
+    });
+  };
+
+  // Sincronización bidireccional de la URL en la barra de direcciones del navegador
+  const syncUrlWithState = (
+    cat: Category | null | undefined,
+    sub: Subcategory | null | undefined,
+    prod: Product | null | undefined,
+    variant: ProductVariant | null | undefined,
+    options?: { replace?: boolean }
+  ) => {
+    if (typeof window === "undefined") return;
+
+    const url = new URL(window.location.href);
+
+    if (cat) {
+      url.searchParams.set("categoria", getCategorySlug(cat));
+    } else {
+      url.searchParams.delete("categoria");
+    }
+
+    if (sub) {
+      url.searchParams.set("subcategoria", getSubcategorySlug(sub));
+    } else {
+      url.searchParams.delete("subcategoria");
+    }
+
+    if (prod) {
+      url.searchParams.set("producto", getProductSlug(prod));
+    } else {
+      url.searchParams.delete("producto");
+    }
+
+    if (variant) {
+      url.searchParams.set("subproducto", getVariantSlug(variant));
+      url.searchParams.delete("variante");
+    } else {
+      url.searchParams.delete("subproducto");
+      url.searchParams.delete("variante");
+    }
+
+    const query = url.searchParams.toString();
+    const nextUrl = url.pathname + (query ? `?${query}` : "") + (url.hash || "");
+
+    if (options?.replace) {
+      window.history.replaceState(null, "", nextUrl);
+    } else {
+      window.history.pushState(null, "", nextUrl);
+    }
+  };
+
+  // Detección y aplicación de parámetros de URL para deep linking y soporte de botón Atrás/Adelante
+  const applyUrlParams = () => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const catParam = params.get("categoria");
+    const subParam = params.get("subcategoria");
+    const prodParam = params.get("producto");
+    const varParam = params.get("subproducto") || params.get("variante");
+
+    let foundCat: Category | undefined;
+    let foundSub: Subcategory | undefined;
+    let foundProd: Product | undefined;
+    let foundVar: ProductVariant | undefined;
+
+    if (catParam) {
+      foundCat = matchCategory(catParam, categoriesList);
+    }
+
+    if (subParam) {
+      foundSub = matchSubcategory(subParam, subcategoriesList, foundCat?.id);
+      if (foundSub && !foundCat) {
+        foundCat = categoriesList.find((c) => c.id === foundSub?.categoria_id);
       }
+    }
 
-      if (prodParam) {
-        const foundProd = productsList.find(p => p.slug === prodParam || p.id === prodParam);
-        if (foundProd) {
-          setSelectedProduct(foundProd);
-          if (varParam) {
-            const foundVar = variantsList.find(v => v.id === varParam || v.sku === varParam);
-            if (foundVar) {
-              setSelectedVariant(foundVar);
-            }
-          }
+    if (prodParam) {
+      foundProd = matchProduct(prodParam, productsList);
+      if (foundProd) {
+        if (!foundCat && foundProd.categoria_id) {
+          foundCat = categoriesList.find((c) => c.id === foundProd?.categoria_id);
+        }
+        if (!foundSub && foundProd.subcategoria_id) {
+          foundSub = subcategoriesList.find((s) => s.id === foundProd?.subcategoria_id);
+        }
+        if (varParam) {
+          foundVar = matchVariant(varParam, variantsList, foundProd.id);
         }
       }
     }
+
+    // Nivel 1 & 2: Categorías y Subcategorías
+    if (foundCat) {
+      setActiveCategoryFilter(foundCat.id);
+      setCatalogViewMode("categories");
+      if (foundSub) {
+        setActiveSubcategoryFilter(foundSub.id);
+      } else {
+        const subcats = subcategoriesList.filter((s) => s.categoria_id === foundCat?.id);
+        if (subcats.length > 0) {
+          setActiveSubcategoryFilter(null);
+        } else {
+          setActiveSubcategoryFilter("all");
+        }
+      }
+    } else if (foundSub) {
+      setActiveCategoryFilter(foundSub.categoria_id);
+      setActiveSubcategoryFilter(foundSub.id);
+      setCatalogViewMode("categories");
+    } else {
+      setActiveCategoryFilter("all");
+      setActiveSubcategoryFilter(null);
+    }
+
+    // Nivel 3 & 4: Producto y Subproducto (Variante)
+    if (foundProd) {
+      setSelectedProduct(foundProd);
+      setSelectedVariant(foundVar || null);
+    } else {
+      setSelectedProduct(null);
+      setSelectedVariant(null);
+    }
+  };
+
+  useEffect(() => {
+    applyUrlParams();
+  }, [categoriesList, subcategoriesList, productsList, variantsList]);
+
+  // Listener del historial del navegador (Atrás / Adelante)
+  useEffect(() => {
+    const onPopState = () => {
+      applyUrlParams();
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
   }, [categoriesList, subcategoriesList, productsList, variantsList]);
 
   // Sincronizar URL cuando se abre o cierra un producto
   const handleOpenProduct = (prod: Product, variant?: ProductVariant | null) => {
     setSelectedProduct(prod);
     setSelectedVariant(variant || null);
-    if (typeof window !== "undefined") {
-      const url = new URL(window.location.href);
-      url.searchParams.set("producto", prod.slug || prod.id);
-      if (variant?.id) {
-        url.searchParams.set("variante", variant.id);
-      } else {
-        url.searchParams.delete("variante");
-      }
-      window.history.pushState(null, '', url.toString());
-    }
+
+    const catId = prod.categoria_id || (activeCategoryFilter !== "all" ? activeCategoryFilter : null);
+    const cat = categoriesList.find((c) => c.id === catId);
+
+    const subId = prod.subcategoria_id || (activeSubcategoryFilter && activeSubcategoryFilter !== "all" ? activeSubcategoryFilter : null);
+    const sub = subcategoriesList.find((s) => s.id === subId);
+
+    syncUrlWithState(cat, sub, prod, variant || null);
   };
 
   const handleCloseProduct = () => {
     setSelectedProduct(null);
     setSelectedVariant(null);
-    if (typeof window !== "undefined") {
-      const url = new URL(window.location.href);
-      url.searchParams.delete("producto");
-      url.searchParams.delete("variante");
-      const newQuery = url.searchParams.toString();
-      window.history.pushState(null, '', url.pathname + (newQuery ? '?' + newQuery : ''));
-    }
+
+    const cat = categoriesList.find((c) => c.id === activeCategoryFilter);
+    const sub = subcategoriesList.find((s) => s.id === activeSubcategoryFilter);
+
+    syncUrlWithState(cat, sub, null, null);
   };
 
   const handleCopyDirectLink = (e: React.MouseEvent, prod: Product, variant?: ProductVariant | null) => {
     e.stopPropagation();
     if (typeof window !== "undefined") {
+      const cat = categoriesList.find((c) => c.id === prod.categoria_id);
+      const sub = subcategoriesList.find((s) => s.id === prod.subcategoria_id);
+
       const url = new URL(window.location.origin);
-      url.searchParams.set("producto", prod.slug || prod.id);
-      if (variant?.id) {
-        url.searchParams.set("variante", variant.id);
+      if (cat) url.searchParams.set("categoria", getCategorySlug(cat));
+      if (sub) url.searchParams.set("subcategoria", getSubcategorySlug(sub));
+      url.searchParams.set("producto", getProductSlug(prod));
+      if (variant) {
+        url.searchParams.set("subproducto", getVariantSlug(variant));
       }
+
       navigator.clipboard.writeText(url.toString());
       const linkKey = variant?.id ? `${prod.id}_${variant.id}` : prod.id;
       setCopiedLink(linkKey);
@@ -434,14 +610,17 @@ export default function StorefrontClient({
     }
   };
 
-  // Reset de páginas y navegación jerárquica del catálogo
+  // Reset de páginas y navegación jerárquica del catálogo con sincronización en el link
   const handleSelectCategory = (catId: string) => {
     setActiveCategoryFilter(catId);
+    const cat = categoriesList.find((c) => c.id === catId);
     const subcats = subcategoriesList.filter((s) => s.categoria_id === catId);
     if (subcats.length > 0) {
       setActiveSubcategoryFilter(null); // Abre la vista de Subcategorías (Nivel 2)
+      syncUrlWithState(cat, null, null, null);
     } else {
       setActiveSubcategoryFilter("all"); // Si no tiene subcategorías, muestra los productos directamente
+      syncUrlWithState(cat, null, null, null);
     }
     setSubcategoriesPage(1);
     setProductsPage(1);
@@ -449,12 +628,18 @@ export default function StorefrontClient({
 
   const handleSelectSubcategory = (subId: string) => {
     setActiveSubcategoryFilter(subId); // Entra a ver los productos de la subcategoría (Nivel 3)
+    const sub = subcategoriesList.find((s) => s.id === subId);
+    const catId = sub?.categoria_id || activeCategoryFilter;
+    const cat = categoriesList.find((c) => c.id === catId);
+    syncUrlWithState(cat, sub, null, null);
     setProductsPage(1);
   };
 
   const handleBackToSubcategories = () => {
     setActiveSubcategoryFilter(null);
     setSubcategoriesPage(1);
+    const cat = categoriesList.find((c) => c.id === activeCategoryFilter);
+    syncUrlWithState(cat, null, null, null);
   };
 
   const handleBackToCategories = () => {
@@ -462,6 +647,7 @@ export default function StorefrontClient({
     setActiveSubcategoryFilter(null);
     setCatalogViewMode("categories");
     setCategoriesPage(1);
+    syncUrlWithState(null, null, null, null);
   };
 
   // Formateo de precio según la moneda activa
@@ -1265,20 +1451,23 @@ export default function StorefrontClient({
           /* 2. NIVEL 2: MODO CUADRÍCULA DE SUBCATEGORÍAS (8 POR VISTA - EJ. BLOOD STRIKE, FREE FIRE) */
           /* ========================================================================= */
           <div className="space-y-6">
-            {/* Barra superior de navegación */}
+            {/* Barra superior de navegación con Breadcrumbs y enlace visible */}
             <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-2xl bg-[#0B0D13]/85 border border-white/15 backdrop-blur-md">
-              <button
-                onClick={handleBackToCategories}
-                className="px-4 py-2 rounded-full bg-white/10 hover:bg-white/20 text-white font-bold text-xs flex items-center gap-2 transition hover:scale-105 active:scale-95"
-              >
-                <ArrowLeft className="w-4 h-4 text-[#FFF01F]" />
-                <span>← Volver a Categorías</span>
-              </button>
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={handleBackToCategories}
+                  className="px-3.5 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white font-bold text-xs flex items-center gap-1.5 transition hover:scale-105 active:scale-95"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5 text-[#FFF01F]" />
+                  <span>Categorías</span>
+                </button>
+                <span className="text-zinc-500 font-mono text-xs">/</span>
+                <span className="px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-[#FFF01F] font-mono text-xs font-bold flex items-center gap-1">
+                  <span>📁 {activeCategoryObj ? activeCategoryObj.nombre : "Categoría"}</span>
+                </span>
+              </div>
 
               <div className="flex items-center gap-2">
-                <span className="text-xs font-mono text-[#FFF01F] font-bold">
-                  {activeCategoryObj ? activeCategoryObj.nombre : "Categoría"}
-                </span>
                 <span className="px-2.5 py-0.5 rounded-full bg-[#FF007F] text-white text-xs font-mono font-bold">
                   {availableSubcategories.length} subcategorías
                 </span>
@@ -1407,31 +1596,58 @@ export default function StorefrontClient({
           /* ========================================================================= */
           <div className="space-y-6">
             
-            {/* Barra de Navegación & Filtros */}
+            {/* Barra de Navegación con Breadcrumbs interactivos y enlace directo */}
             <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-2xl bg-[#0B0D13]/85 border border-white/15 backdrop-blur-md">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap text-xs">
                 {activeCategoryFilter !== "all" && availableSubcategories.length > 0 && (
                   <button
                     onClick={handleBackToSubcategories}
                     className="px-3.5 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white font-bold text-xs flex items-center gap-1.5 transition hover:scale-105 active:scale-95"
                   >
                     <ArrowLeft className="w-3.5 h-3.5 text-[#FFF01F]" />
-                    <span>Volver a Subcategorías</span>
+                    <span>Volver</span>
                   </button>
                 )}
-                <button
-                  onClick={handleBackToCategories}
-                  className="px-3.5 py-1.5 rounded-full bg-white/5 hover:bg-white/15 text-zinc-300 hover:text-white font-medium text-xs flex items-center gap-1.5 transition"
-                >
-                  <span>Categorías</span>
-                </button>
+                
+                {/* Breadcrumbs interactivos */}
+                <div className="flex items-center gap-1.5 font-mono text-xs flex-wrap">
+                  <button
+                    onClick={handleBackToCategories}
+                    className="text-zinc-400 hover:text-white transition px-2 py-1 rounded-md hover:bg-white/5"
+                  >
+                    Categorías
+                  </button>
+                  {activeCategoryObj && (
+                    <>
+                      <span className="text-zinc-600">/</span>
+                      <button
+                        onClick={handleBackToSubcategories}
+                        className="text-amber-300 hover:text-[#FFF01F] transition px-2 py-1 rounded-md hover:bg-white/5"
+                      >
+                        {activeCategoryObj.nombre}
+                      </button>
+                    </>
+                  )}
+                  {activeSubcategoryObj && (
+                    <>
+                      <span className="text-zinc-600">/</span>
+                      <span className="text-[#FFF01F] font-bold px-2.5 py-1 rounded-md bg-[#FFF01F]/10 border border-[#FFF01F]/20 flex items-center gap-1">
+                        🎮 {activeSubcategoryObj.nombre}
+                      </span>
+                    </>
+                  )}
+                  {activeSubcategoryFilter === "all" && (
+                    <>
+                      <span className="text-zinc-600">/</span>
+                      <span className="text-[#FFF01F] font-bold px-2 py-0.5 rounded-md bg-[#FFF01F]/10 border border-[#FFF01F]/20">
+                        Todos
+                      </span>
+                    </>
+                  )}
+                </div>
               </div>
 
               <div className="flex items-center gap-2">
-                <span className="text-xs font-mono text-[#FFF01F] font-bold">
-                  {activeCategoryObj ? activeCategoryObj.nombre : "Catálogo Global"}
-                  {activeSubcategoryObj ? ` > ${activeSubcategoryObj.nombre}` : (activeSubcategoryFilter === "all" ? " > Todos" : "")}
-                </span>
                 <span className="px-2.5 py-0.5 rounded-full bg-[#FF007F] text-white text-xs font-mono font-bold">
                   {filteredProducts.length} disponibles
                 </span>
@@ -1729,6 +1945,13 @@ export default function StorefrontClient({
           defaultCurrency={currentCurrency}
           currentUser={currentUser}
           onClose={handleCloseProduct}
+          onSelectVariant={(v) => {
+            const casted = v as unknown as ProductVariant;
+            setSelectedVariant(casted);
+            const cat = categoriesList.find((c) => c.id === selectedProduct.categoria_id);
+            const sub = subcategoriesList.find((s) => s.id === selectedProduct.subcategoria_id);
+            syncUrlWithState(cat, sub, selectedProduct, casted, { replace: true });
+          }}
         />
       )}
 

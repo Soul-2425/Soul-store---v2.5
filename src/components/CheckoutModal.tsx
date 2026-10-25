@@ -99,6 +99,7 @@ interface CheckoutModalProps {
   defaultCurrency?: "USD" | "VES" | "MXN";
   currentUser?: UserProfile | null;
   onClose: () => void;
+  onSelectVariant?: (variant: VariantItem) => void;
 }
 
 export default function CheckoutModal({
@@ -112,6 +113,7 @@ export default function CheckoutModal({
   defaultCurrency = "USD",
   currentUser = null,
   onClose,
+  onSelectVariant,
 }: CheckoutModalProps) {
   // Pasos: 1 = Datos del pedido, 2 = Pago y Comprobante, 3 = Confirmado
   const [currentStep, setCurrentStep] = useState<1 | 2>(1);
@@ -728,12 +730,25 @@ export default function CheckoutModal({
                 </div>
               )}
               <div className="min-w-0 flex-1 pr-6">
-                <div className="flex items-center gap-2 mb-0.5">
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#D61A1A]/20 text-[#FFF01F] text-[10px] font-mono border border-[#D61A1A]/40">
-                    {product.categoria_nombre || "Gaming"}
+                {/* Ruta / Breadcrumb Jerárquico */}
+                <div className="flex items-center gap-1.5 mb-1 text-[10px] font-mono text-zinc-400 flex-wrap">
+                  <span className="text-[#FFF01F] font-bold">
+                    {category?.nombre || product.categoria_nombre || "Gaming"}
                   </span>
-                  <span className="text-[10px] font-mono text-slate-400">
-                    Paso {currentStep} de 2
+                  {(subcategory?.nombre || product.subcategoria_nombre) && (
+                    <>
+                      <span>/</span>
+                      <span className="text-amber-300">
+                        {subcategory?.nombre || product.subcategoria_nombre}
+                      </span>
+                    </>
+                  )}
+                  <span>/</span>
+                  <span className="text-zinc-200 truncate max-w-[140px]">
+                    {product.nombre}
+                  </span>
+                  <span className="ml-auto text-[9px] text-slate-500 font-mono">
+                    Paso {currentStep}/2
                   </span>
                 </div>
                 <h3 className="text-base sm:text-lg font-black text-white leading-tight truncate">
@@ -767,7 +782,10 @@ export default function CheckoutModal({
                           <button
                             key={v.id}
                             type="button"
-                            onClick={() => setSelectedSubVariant(v)}
+                            onClick={() => {
+                              setSelectedSubVariant(v);
+                              onSelectVariant?.(v);
+                            }}
                             className={`p-2.5 rounded-2xl text-left border transition flex items-center justify-between gap-2.5 ${
                               isSelected
                                 ? "bg-[#D61A1A]/40 border-[#FFF01F] text-white shadow-md ring-1 ring-[#FFF01F]"
