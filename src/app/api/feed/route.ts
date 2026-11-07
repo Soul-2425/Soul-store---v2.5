@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
+import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
-// GET: Retornar las entregas aprobadas con sus likes y comentarios para el Feed público
+// GET: Retornar las entregas aprobadas con sus likes y comentarios para el Feed público, y lista de administradores
 export async function GET() {
   try {
     const items = await sql`
@@ -38,7 +39,19 @@ export async function GET() {
       LIMIT 200
     `;
 
-    return NextResponse.json({ feed: items });
+    // Obtener los administradores oficiales para las historias superiores
+    const admins = await sql`
+      SELECT id, nombre, nickname, avatar_url, rango, telefono_whatsapp
+      FROM public.usuarios
+      WHERE rango = 'admin'
+      ORDER BY fecha_registro ASC
+      LIMIT 10
+    `;
+
+    return NextResponse.json({ 
+      feed: items,
+      admins: admins || []
+    });
   } catch (error: any) {
     console.error("Error al obtener feed de entregas:", error);
     return NextResponse.json(
@@ -62,6 +75,23 @@ export async function POST(request: Request) {
       es_admin = false,
     } = body;
 
+    // Verificar si el usuario actual es administrador
+    let esUsuarioAdmin = false;
+    try {
+      const supabase = await createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const [u] = await sql`SELECT rango FROM public.usuarios WHERE id = ${user.id}`;
+        if (u && u.rango === "admin") {
+          esUsuarioAdmin = true;
+        }
+      }
+    } catch {}
+
+    // REGLA: Si la publica un cliente, requiere aprobación en el panel admin (aprobado_admin = FALSE)
+    // Si la publica un administrador, se aprueba automáticamente (aprobado_admin = TRUE)
+    const autoAprobado = esUsuarioAdmin || Boolean(es_admin);
+
     const safeNickname = (nickname_anonimo || "Cliente Verificado").trim().slice(0, 50);
     const safeDescripcion = (descripcion_entrega || "Recarga Despachada").trim().slice(0, 255);
     const safeComentario = comentario_cliente ? String(comentario_cliente).trim().slice(0, 500) : null;
@@ -69,7 +99,6 @@ export async function POST(request: Request) {
     const safeAvatarUrl = avatar_url ? String(avatar_url).trim() : null;
     const safeCategoria = (categoria || "General").trim().slice(0, 50);
 
-    // Las referencias creadas por el admin o verificadas se aprueban automáticamente
     const [nuevaEntrega] = await sql`
       INSERT INTO public.feed_entregas (
         nickname_anonimo,
@@ -88,7 +117,7 @@ export async function POST(request: Request) {
         ${safeImagenUrl},
         ${safeAvatarUrl},
         ${safeCategoria},
-        TRUE,
+        ${autoAprobado},
         0
       )
       RETURNING 
@@ -106,11 +135,11 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
-      item: {
-        ...nuevaEntrega,
-        comentarios: [],
-      },
-      message: "Publicación agregada con éxito al Feed",
+      aprobado_admin: autoAprobado,
+      item: autoAprobado ? { ...nuevaEntrega, comentarios: [] } : null,
+      message: autoAprobado
+        ? "Publicación agregada con éxito al Feed."
+        : "¡Tu publicación ha sido enviada con éxito! Está en revisión por un administrador y aparecerá en el feed en cuanto sea aprobada.",
     });
   } catch (error: any) {
     console.error("Error al crear publicación en feed:", error);
