@@ -1,4 +1,4 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { sql } from "@/lib/db";
 import { createClient } from "@/lib/supabase/server";
 import StorefrontClient from "@/components/StorefrontClient";
@@ -13,8 +13,36 @@ export default async function HomePage() {
   let tasaVes = 0;
   let tasaMxn = 0;
   let initialUser = null;
+  let detectedCountry: string | null = null;
+  let initialCurrency: "USD" | "VES" | "MXN" = "USD";
 
   try {
+    // 0. Detección de geolocalización basada en IP del visitante (Vercel / Cloudflare / Proxy)
+    try {
+      const headersList = await headers();
+      const country = (
+        headersList.get("x-vercel-ip-country") ||
+        headersList.get("cf-ipcountry") ||
+        headersList.get("x-country-code") ||
+        headersList.get("x-real-ip-country") ||
+        ""
+      ).trim().toUpperCase();
+
+      if (country) {
+        detectedCountry = country;
+        if (country === "VE") {
+          initialCurrency = "VES";
+        } else if (country === "MX") {
+          initialCurrency = "MXN";
+        } else {
+          // Todo el resto de países (Colombia, EE. UU., Europa, etc.) usa USDT / USD
+          initialCurrency = "USD";
+        }
+      }
+    } catch (geoErr) {
+      console.warn("No se pudieron leer cabeceras de geolocalización:", geoErr);
+    }
+
     // 1. Obtener sesión del usuario solo si hay cookies de Supabase
     const cookieStore = await cookies();
     const hasAuthCookie = cookieStore.getAll().some((c) => c.name.startsWith("sb-"));
@@ -113,6 +141,8 @@ export default async function HomePage() {
       tasaVes={tasaVes}
       tasaMxn={tasaMxn}
       initialUser={initialUser}
+      initialCurrency={initialCurrency}
+      detectedCountry={detectedCountry}
     />
   );
 }

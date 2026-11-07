@@ -112,6 +112,8 @@ interface StorefrontClientProps {
   tasaVes: number;
   tasaMxn: number;
   initialUser?: UserProfile | null;
+  initialCurrency?: Currency;
+  detectedCountry?: string | null;
 }
 
 export interface FeedComment {
@@ -253,18 +255,96 @@ export default function StorefrontClient({
   tasaVes,
   tasaMxn,
   initialUser = null,
+  initialCurrency = "USD",
+  detectedCountry = null,
 }: StorefrontClientProps) {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(null);
   const [activeCategoryFilter, setActiveCategoryFilter] = useState<string>("all");
   const [activeSubcategoryFilter, setActiveSubcategoryFilter] = useState<string | null>(null);
   const [catalogViewMode, setCatalogViewMode] = useState<"categories" | "all_products">("categories");
-  const [currentCurrency, setCurrentCurrency] = useState<Currency>("USD");
+  const [currentCurrency, setCurrentCurrency] = useState<Currency>(initialCurrency);
   const [currencyDropdownOpen, setCurrencyDropdownOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [aboutModalOpen, setAboutModalOpen] = useState(false);
   const [contactModalOpen, setContactModalOpen] = useState(false);
   const [cartModalOpen, setCartModalOpen] = useState(false);
+
+  // Guardar cambio manual de moneda
+  const handleCurrencyChange = (newCurrency: Currency) => {
+    setCurrentCurrency(newCurrency);
+    try {
+      localStorage.setItem("soul_store_currency", newCurrency);
+    } catch {
+      // Ignorar si el almacenamiento local está restringido
+    }
+  };
+
+  // Detección y auto-configuración de moneda según geolocalización
+  useEffect(() => {
+    // 1. Prioridad: Preferencia guardada previamente por el usuario
+    try {
+      const saved = localStorage.getItem("soul_store_currency") as Currency | null;
+      if (saved && (saved === "USD" || saved === "VES" || saved === "MXN")) {
+        setCurrentCurrency(saved);
+        return;
+      }
+    } catch {}
+
+    // 2. Si el servidor detectó el país por cabeceras IP (Vercel / Cloudflare)
+    if (detectedCountry) {
+      if (detectedCountry === "VE") {
+        setCurrentCurrency("VES");
+        return;
+      }
+      if (detectedCountry === "MX") {
+        setCurrentCurrency("MXN");
+        return;
+      }
+      // Cualquier otro país del mundo utiliza USDT / USD
+      setCurrentCurrency("USD");
+      return;
+    }
+
+    // 3. Detección client-side por Timezone del navegador (instantáneo, 100% offline, útil en localhost)
+    try {
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+      if (tz === "America/Caracas") {
+        setCurrentCurrency("VES");
+        return;
+      }
+      const mxTimezones = [
+        "America/Mexico_City",
+        "America/Cancun",
+        "America/Merida",
+        "America/Monterrey",
+        "America/Mazatlan",
+        "America/Tijuana",
+        "America/Hermosillo",
+        "America/Chihuahua",
+        "America/Bahia_Banderas",
+        "America/Matamoros",
+        "America/Ojinaga",
+      ];
+      if (tz.toLowerCase().includes("mexico") || mxTimezones.includes(tz)) {
+        setCurrentCurrency("MXN");
+        return;
+      }
+    } catch {}
+
+    // 4. Fallback secundario vía API de geolocalización interna
+    fetch("/api/geo")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.currency) {
+          const checkSaved = localStorage.getItem("soul_store_currency");
+          if (!checkSaved) {
+            setCurrentCurrency(data.currency);
+          }
+        }
+      })
+      .catch(() => {});
+  }, [detectedCountry]);
 
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(initialUser);
 
@@ -862,38 +942,40 @@ export default function StorefrontClient({
                 onClick={() => setCurrencyDropdownOpen(!currencyDropdownOpen)}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/15 border border-white/15 text-white text-xs font-bold transition shadow-sm"
               >
-                <span>$ {currentCurrency}</span>
+                <span>
+                  {currentCurrency === "USD" ? "$ USDT / USD" : currentCurrency === "VES" ? "Bs. VES" : "$ MXN"}
+                </span>
                 <ChevronDown className="w-3.5 h-3.5 text-white/70" />
               </button>
 
               {currencyDropdownOpen && (
-                <div className="absolute right-0 mt-2 w-36 rounded-2xl bg-[#0B0D13]/95 border border-white/15 p-1.5 shadow-2xl backdrop-blur-xl z-50 text-xs">
+                <div className="absolute right-0 mt-2 w-44 rounded-2xl bg-[#0B0D13]/95 border border-white/15 p-1.5 shadow-2xl backdrop-blur-xl z-50 text-xs">
                   <button
-                    onClick={() => { setCurrentCurrency("USD"); setCurrencyDropdownOpen(false); }}
-                    className={`w-full flex items-center justify-between px-3 py-2 rounded-xl transition ${
-                      currentCurrency === "USD" ? "bg-[#FF007F] text-white font-bold" : "text-white/80 hover:bg-white/10"
-                    }`}
-                  >
-                    <span>USD ($)</span>
-                    {currentCurrency === "USD" && <Check className="w-3.5 h-3.5 text-white" />}
-                  </button>
-                  <button
-                    onClick={() => { setCurrentCurrency("VES"); setCurrencyDropdownOpen(false); }}
+                    onClick={() => { handleCurrencyChange("VES"); setCurrencyDropdownOpen(false); }}
                     className={`w-full flex items-center justify-between px-3 py-2 rounded-xl transition ${
                       currentCurrency === "VES" ? "bg-[#FF007F] text-white font-bold" : "text-white/80 hover:bg-white/10"
                     }`}
                   >
-                    <span>VES (Bs.)</span>
+                    <span>VES (Bs. Bolívares)</span>
                     {currentCurrency === "VES" && <Check className="w-3.5 h-3.5 text-white" />}
                   </button>
                   <button
-                    onClick={() => { setCurrentCurrency("MXN"); setCurrencyDropdownOpen(false); }}
+                    onClick={() => { handleCurrencyChange("MXN"); setCurrencyDropdownOpen(false); }}
                     className={`w-full flex items-center justify-between px-3 py-2 rounded-xl transition ${
                       currentCurrency === "MXN" ? "bg-[#FF007F] text-white font-bold" : "text-white/80 hover:bg-white/10"
                     }`}
                   >
-                    <span>MXN ($)</span>
+                    <span>MXN ($ Pesos)</span>
                     {currentCurrency === "MXN" && <Check className="w-3.5 h-3.5 text-white" />}
+                  </button>
+                  <button
+                    onClick={() => { handleCurrencyChange("USD"); setCurrencyDropdownOpen(false); }}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-xl transition ${
+                      currentCurrency === "USD" ? "bg-[#FF007F] text-white font-bold" : "text-white/80 hover:bg-white/10"
+                    }`}
+                  >
+                    <span>USDT / USD ($)</span>
+                    {currentCurrency === "USD" && <Check className="w-3.5 h-3.5 text-white" />}
                   </button>
                 </div>
               )}
@@ -1952,6 +2034,7 @@ export default function StorefrontClient({
             const sub = subcategoriesList.find((s) => s.id === selectedProduct.subcategoria_id);
             syncUrlWithState(cat, sub, selectedProduct, casted, { replace: true });
           }}
+          onCurrencyChange={(newCurr) => handleCurrencyChange(newCurr)}
         />
       )}
 

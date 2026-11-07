@@ -100,6 +100,7 @@ interface CheckoutModalProps {
   currentUser?: UserProfile | null;
   onClose: () => void;
   onSelectVariant?: (variant: VariantItem) => void;
+  onCurrencyChange?: (currency: "USD" | "VES" | "MXN") => void;
 }
 
 export default function CheckoutModal({
@@ -114,6 +115,7 @@ export default function CheckoutModal({
   currentUser = null,
   onClose,
   onSelectVariant,
+  onCurrencyChange,
 }: CheckoutModalProps) {
   // Pasos: 1 = Datos del pedido, 2 = Pago y Comprobante, 3 = Confirmado
   const [currentStep, setCurrentStep] = useState<1 | 2>(1);
@@ -172,6 +174,23 @@ export default function CheckoutModal({
   const [showPasswordMap, setShowPasswordMap] = useState<Record<string, boolean>>({});
   const [moneda, setMoneda] = useState<"USD" | "VES" | "MXN">(defaultCurrency);
   const [playerId, setPlayerId] = useState("");
+
+  // Sincronizar moneda si cambia la moneda por defecto externa
+  useEffect(() => {
+    if (defaultCurrency) {
+      setMoneda(defaultCurrency);
+    }
+  }, [defaultCurrency]);
+
+  const handleSelectMoneda = (nuevaMoneda: "USD" | "VES" | "MXN") => {
+    setMoneda(nuevaMoneda);
+    try {
+      localStorage.setItem("soul_store_currency", nuevaMoneda);
+    } catch {}
+    if (onCurrencyChange) {
+      onCurrencyChange(nuevaMoneda);
+    }
+  };
   
   // Nombre y WhatsApp prellenados desde la cuenta del usuario si existe
   const [nombre, setNombre] = useState(
@@ -820,20 +839,20 @@ export default function CheckoutModal({
                   <div className="grid grid-cols-3 gap-2">
                     <button
                       type="button"
-                      onClick={() => setMoneda("USD")}
+                      onClick={() => handleSelectMoneda("USD")}
                       className={`py-2 px-3 rounded-xl text-xs font-bold border transition flex flex-col items-center ${
                         moneda === "USD"
                           ? "bg-[#D61A1A] border-[#FFF01F] text-white shadow-lg shadow-red-600/30"
                           : "bg-black/60 border-white/10 text-slate-400 hover:border-white/20"
                       }`}
                     >
-                      <span>USD ($)</span>
+                      <span>USDT / USD ($)</span>
                       <span className="text-[10px] opacity-75">${precioUsd.toFixed(2)}</span>
                     </button>
 
                     <button
                       type="button"
-                      onClick={() => setMoneda("VES")}
+                      onClick={() => handleSelectMoneda("VES")}
                       className={`py-2 px-3 rounded-xl text-xs font-bold border transition flex flex-col items-center ${
                         moneda === "VES"
                           ? "bg-[#D61A1A] border-[#FFF01F] text-white shadow-lg shadow-red-600/30"
@@ -846,7 +865,7 @@ export default function CheckoutModal({
 
                     <button
                       type="button"
-                      onClick={() => setMoneda("MXN")}
+                      onClick={() => handleSelectMoneda("MXN")}
                       className={`py-2 px-3 rounded-xl text-xs font-bold border transition flex flex-col items-center ${
                         moneda === "MXN"
                           ? "bg-[#D61A1A] border-[#FFF01F] text-white shadow-lg shadow-red-600/30"
