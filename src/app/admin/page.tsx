@@ -49,7 +49,9 @@ import {
   QrCode,
   FileText,
   Gamepad2,
-  Bell
+  Bell,
+  MessageSquare,
+  Heart
 } from "lucide-react";
 import ImageUploadInput from "@/components/ImageUploadInput";
 import DynamicFieldsBuilder, { DynamicFieldItem } from "@/components/DynamicFieldsBuilder";
@@ -358,12 +360,12 @@ function RankPricingSection({
 }
 
 export default function AdminDashboardPage() {
-  const [activeTab, setActiveTab] = useState<"pedidos" | "catalogo" | "pagos" | "finanzas" | "usuarios" | "tasas" | "boveda" | "notificaciones">("pedidos");
+  const [activeTab, setActiveTab] = useState<"pedidos" | "feed" | "catalogo" | "pagos" | "finanzas" | "usuarios" | "tasas" | "boveda" | "notificaciones">("pedidos");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [ordersPage, setOrdersPage] = useState(1);
   const [usersPage, setUsersPage] = useState(1);
 
-  const handleNavigateTab = (tab: "pedidos" | "catalogo" | "pagos" | "finanzas" | "usuarios" | "tasas" | "boveda" | "notificaciones") => {
+  const handleNavigateTab = (tab: "pedidos" | "feed" | "catalogo" | "pagos" | "finanzas" | "usuarios" | "tasas" | "boveda" | "notificaciones") => {
     setActiveTab(tab);
     setMobileNavOpen(false);
     if (typeof window !== "undefined") {
@@ -391,6 +393,18 @@ export default function AdminDashboardPage() {
   const [testingAdminNotif, setTestingAdminNotif] = useState(false);
   const [testingClientNotif, setTestingClientNotif] = useState(false);
   const [highlightOrderId, setHighlightOrderId] = useState<string | null>(null);
+
+  // Estados de Referencias & Feed Admin
+  const [adminFeedList, setAdminFeedList] = useState<any[]>([]);
+  const [loadingAdminFeed, setLoadingAdminFeed] = useState(false);
+  const [feedFormNick, setFeedFormNick] = useState("");
+  const [feedFormCat, setFeedFormCat] = useState("Free Fire");
+  const [feedFormDesc, setFeedFormDesc] = useState("");
+  const [feedFormComentario, setFeedFormComentario] = useState("");
+  const [feedFormImg, setFeedFormImg] = useState("");
+  const [feedFormAprobado, setFeedFormAprobado] = useState(true);
+  const [savingFeedRef, setSavingFeedRef] = useState(false);
+  const [feedSearchTerm, setFeedSearchTerm] = useState("");
 
   // Estados de Métodos de Pago Manuales
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
@@ -1542,11 +1556,102 @@ export default function AdminDashboardPage() {
     }
   };
 
+  // Handlers para Referencias & Feed
+  const fetchAdminFeed = async () => {
+    try {
+      setLoadingAdminFeed(true);
+      const res = await fetch("/api/admin/feed");
+      const data = await res.json();
+      if (data.feed) {
+        setAdminFeedList(data.feed);
+      }
+    } catch (e) {
+      console.error("Error al cargar referencias admin:", e);
+    } finally {
+      setLoadingAdminFeed(false);
+    }
+  };
+
+  const handleCreateFeedReference = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!feedFormDesc.trim()) return;
+    setSavingFeedRef(true);
+    try {
+      const res = await fetch("/api/admin/feed", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nickname_anonimo: feedFormNick.trim() || "Cliente Verificado",
+          descripcion_entrega: feedFormDesc.trim(),
+          comentario_cliente: feedFormComentario.trim() || null,
+          categoria: feedFormCat,
+          imagen_url: feedFormImg.trim() || null,
+          aprobado_admin: feedFormAprobado,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showNotification("success", "Referencia creada y agregada al feed.");
+        setAdminFeedList((prev) => [data.item, ...prev]);
+        setFeedFormDesc("");
+        setFeedFormComentario("");
+        setFeedFormImg("");
+      } else {
+        showNotification("error", data.error || "No se pudo crear la referencia");
+      }
+    } catch {
+      showNotification("error", "Error de red al crear referencia");
+    } finally {
+      setSavingFeedRef(false);
+    }
+  };
+
+  const handleToggleFeedItemApproval = async (id: string, currentStatus: boolean) => {
+    try {
+      const res = await fetch("/api/admin/feed/toggle", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ feed_id: id, aprobado_admin: !currentStatus }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setAdminFeedList((prev) =>
+          prev.map((item) => (item.id === id ? { ...item, aprobado_admin: !currentStatus } : item))
+        );
+        showNotification("success", !currentStatus ? "Referencia visible en el feed público" : "Referencia ocultada del feed");
+      }
+    } catch {
+      showNotification("error", "Error al actualizar visibilidad de la referencia");
+    }
+  };
+
+  const handleDeleteFeedReference = async (id: string) => {
+    if (!confirm("¿Seguro que deseas eliminar esta referencia del feed?")) return;
+    try {
+      const res = await fetch(`/api/admin/feed?id=${id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setAdminFeedList((prev) => prev.filter((item) => item.id !== id));
+        showNotification("success", "Referencia eliminada correctamente.");
+      } else {
+        showNotification("error", data.error || "Error al eliminar");
+      }
+    } catch {
+      showNotification("error", "Error de red al eliminar referencia");
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === "feed") {
+      fetchAdminFeed();
+    }
+  }, [activeTab]);
+
   useEffect(() => {
     if (typeof window !== "undefined") {
       const urlParams = new URLSearchParams(window.location.search);
       const tabParam = urlParams.get("tab");
-      const validTabs = ["pedidos", "catalogo", "pagos", "finanzas", "usuarios", "tasas", "boveda", "notificaciones"];
+      const validTabs = ["pedidos", "feed", "catalogo", "pagos", "finanzas", "usuarios", "tasas", "boveda", "notificaciones"];
       if (tabParam && validTabs.includes(tabParam)) {
         setActiveTab(tabParam as any);
       }
@@ -2406,6 +2511,7 @@ export default function AdminDashboardPage() {
         {(() => {
           const tabItems = [
             { id: "pedidos", label: "Gestión de Pedidos & Despachos", icon: ShoppingBag, badge: orders.filter((o) => o.item_estado === "EN_COLA").length },
+            { id: "feed", label: "Referencias & Feed en Vivo", icon: MessageSquare, badge: adminFeedList.length },
             { id: "catalogo", label: "Gestor de Catálogo Dinámico", icon: Package },
             { id: "finanzas", label: "Dashboard Financiero", icon: BarChart3 },
             { id: "usuarios", label: "Gestor de Usuarios", icon: Users },
@@ -2413,7 +2519,7 @@ export default function AdminDashboardPage() {
             { id: "pagos", label: "Métodos de Pago", icon: CreditCard, badge: paymentMethods.filter(p => p.activo).length },
             { id: "boveda", label: "Bóveda Segura", icon: ShieldCheck, badge: vaultItems.filter(i => i.estado === "OFERTA_ESPECIAL").length },
             { id: "notificaciones", label: "Plantillas Notificaciones", icon: Bell },
-          ].filter(t => !isDesigner || t.id === "catalogo");
+          ].filter(t => !isDesigner || t.id === "catalogo" || t.id === "feed");
 
           const currentTabItem = tabItems.find(t => t.id === activeTab) || tabItems[0];
           const CurrentIcon = currentTabItem.icon;
@@ -2485,22 +2591,41 @@ export default function AdminDashboardPage() {
       <div className="hidden md:block bg-black/40 border-b border-slate-800/80 px-4">
         <div className="max-w-7xl mx-auto flex items-center gap-2 overflow-x-auto py-2">
           {!isDesigner && (
-            <button
-              onClick={() => handleNavigateTab("pedidos")}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
-                activeTab === "pedidos"
-                  ? "bg-fuchsia-600 text-white shadow-glow"
-                  : "text-slate-400 hover:text-white glass-panel"
-              }`}
-            >
-              <ShoppingBag className="w-4 h-4" />
-              <span>Gestión de Pedidos & Despachos</span>
-              {orders.filter((o) => o.item_estado === "EN_COLA").length > 0 && (
-                <span className="px-1.5 py-0.2 rounded-full bg-pink-500 text-white font-mono text-[10px] animate-pulse">
-                  {orders.filter((o) => o.item_estado === "EN_COLA").length}
-                </span>
-              )}
-            </button>
+            <>
+              <button
+                onClick={() => handleNavigateTab("pedidos")}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
+                  activeTab === "pedidos"
+                    ? "bg-fuchsia-600 text-white shadow-glow"
+                    : "text-slate-400 hover:text-white glass-panel"
+                }`}
+              >
+                <ShoppingBag className="w-4 h-4" />
+                <span>Gestión de Pedidos & Despachos</span>
+                {orders.filter((o) => o.item_estado === "EN_COLA").length > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full bg-pink-500 text-white font-mono text-[10px] animate-pulse">
+                    {orders.filter((o) => o.item_estado === "EN_COLA").length}
+                  </span>
+                )}
+              </button>
+
+              <button
+                onClick={() => handleNavigateTab("feed")}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
+                  activeTab === "feed"
+                    ? "bg-fuchsia-600 text-white shadow-glow"
+                    : "text-slate-400 hover:text-white glass-panel"
+                }`}
+              >
+                <MessageSquare className="w-4 h-4 text-pink-400" />
+                <span>Referencias &amp; Feed</span>
+                {adminFeedList.length > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full bg-fuchsia-500/20 text-fuchsia-300 font-mono text-[10px]">
+                    {adminFeedList.length}
+                  </span>
+                )}
+              </button>
+            </>
           )}
 
           <button
@@ -3077,6 +3202,292 @@ export default function AdminDashboardPage() {
                 )}
               </div>
             )}
+          </div>
+        )}
+
+        {/* ======================================================== */}
+        {/* TAB FEED: GESTOR DE REFERENCIAS & FEED EN VIVO          */}
+        {/* ======================================================== */}
+        {activeTab === "feed" && (
+          <div className="space-y-8 animate-in fade-in duration-200">
+            {/* Header del Feed */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-900/60 p-6 rounded-3xl border border-slate-800 shadow-xl">
+              <div>
+                <h1 className="text-2xl font-black text-white flex items-center gap-2.5">
+                  <MessageSquare className="w-6 h-6 text-fuchsia-400" />
+                  <span>Gestor de Referencias &amp; Feed en Vivo</span>
+                </h1>
+                <p className="text-xs text-slate-400 mt-1 max-w-xl">
+                  Crea y modera publicaciones, testimonios y comprobantes de recargas que se muestran a los clientes en el Feed público estilo Instagram.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2.5">
+                <Link
+                  href="/feed"
+                  target="_blank"
+                  className="px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white font-bold text-xs transition flex items-center gap-1.5"
+                >
+                  <ExternalLink className="w-3.5 h-3.5 text-fuchsia-400" />
+                  <span>Ver Feed Público</span>
+                </Link>
+
+                <button
+                  onClick={fetchAdminFeed}
+                  disabled={loadingAdminFeed}
+                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs transition flex items-center gap-1.5 border border-slate-700"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${loadingAdminFeed ? "animate-spin text-[#FFF01F]" : ""}`} />
+                  <span>Actualizar</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Formulario para Crear Nueva Referencia */}
+            <div className="bg-slate-900/60 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-5">
+              <div className="flex items-center gap-2.5 border-b border-slate-800 pb-3">
+                <div className="w-7 h-7 rounded-lg bg-fuchsia-500/20 text-fuchsia-400 flex items-center justify-center font-black text-sm">
+                  +
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">Publicar Nueva Referencia en el Feed</h3>
+                  <p className="text-xs text-slate-400">Agrega un comprobante o testimonio de cliente para generar confianza social</p>
+                </div>
+              </div>
+
+              <form onSubmit={handleCreateFeedReference} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="text-xs font-bold text-slate-300 block mb-1">Nickname del Cliente:</label>
+                    <input
+                      type="text"
+                      value={feedFormNick}
+                      onChange={(e) => setFeedFormNick(e.target.value)}
+                      placeholder="Ej: Daniel...99 o Cliente VIP"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 focus:border-fuchsia-500 text-xs text-white outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-300 block mb-1">Categoría / Juego:</label>
+                    <select
+                      value={feedFormCat}
+                      onChange={(e) => setFeedFormCat(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 focus:border-fuchsia-500 text-xs text-white outline-none"
+                    >
+                      <option value="Free Fire">Free Fire</option>
+                      <option value="Blood Strike">Blood Strike</option>
+                      <option value="Roblox">Roblox</option>
+                      <option value="Call of Duty">Call of Duty</option>
+                      <option value="Streaming">Streaming</option>
+                      <option value="General">General</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-300 block mb-1">Recarga / Producto Despachado (*):</label>
+                    <input
+                      type="text"
+                      required
+                      value={feedFormDesc}
+                      onChange={(e) => setFeedFormDesc(e.target.value)}
+                      placeholder="Ej: 2180 + 218 Diamantes Free Fire"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 focus:border-fuchsia-500 text-xs text-white outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-300 block mb-1">Comentario / Opinión del Cliente:</label>
+                  <textarea
+                    rows={2}
+                    value={feedFormComentario}
+                    onChange={(e) => setFeedFormComentario(e.target.value)}
+                    placeholder="Ej: ¡Excelente servicio! Recarga entregada en 2 minutos directamente a mi cuenta."
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 focus:border-fuchsia-500 text-xs text-white outline-none resize-none"
+                  />
+                </div>
+
+                <div>
+                  <ImageUploadInput
+                    label="Foto / Captura de Comprobante (Opcional):"
+                    value={feedFormImg}
+                    onChange={setFeedFormImg}
+                    placeholder="https://ejemplo.com/captura.jpg"
+                    helperText="Sube el comprobante de entrega para que se muestre como publicación de Instagram"
+                  />
+                </div>
+
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-slate-800">
+                  <label className="flex items-center gap-2.5 cursor-pointer text-xs font-bold text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={feedFormAprobado}
+                      onChange={(e) => setFeedFormAprobado(e.target.checked)}
+                      className="w-4 h-4 rounded accent-fuchsia-500 cursor-pointer"
+                    />
+                    <span>Publicar inmediatamente en el Feed Público</span>
+                  </label>
+
+                  <button
+                    type="submit"
+                    disabled={savingFeedRef || !feedFormDesc.trim()}
+                    className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-fuchsia-600 to-pink-600 hover:from-fuchsia-500 hover:to-pink-500 disabled:opacity-40 text-white font-bold text-xs uppercase tracking-wider transition shadow-lg flex items-center justify-center gap-2"
+                  >
+                    {savingFeedRef && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    <span>{savingFeedRef ? "Guardando..." : "Crear Referencia"}</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {/* Lista y Moderación de Referencias Publicadas */}
+            <div className="bg-slate-900/60 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+                <div>
+                  <h3 className="text-base font-bold text-white flex items-center gap-2">
+                    <span>Referencias Existentes</span>
+                    <span className="px-2 py-0.5 rounded-full bg-fuchsia-500/20 text-fuchsia-300 font-mono text-[10px] font-bold">
+                      {adminFeedList.length}
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400">Modera y activa/desactiva la visibilidad pública de cada referencia</p>
+                </div>
+
+                <div className="relative w-full sm:w-64">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={feedSearchTerm}
+                    onChange={(e) => setFeedSearchTerm(e.target.value)}
+                    placeholder="Buscar referencias..."
+                    className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white outline-none focus:border-fuchsia-500"
+                  />
+                </div>
+              </div>
+
+              {loadingAdminFeed ? (
+                <div className="py-16 text-center text-slate-400 space-y-2">
+                  <Loader2 className="w-8 h-8 text-fuchsia-400 animate-spin mx-auto" />
+                  <p className="text-xs">Cargando referencias del feed...</p>
+                </div>
+              ) : adminFeedList.length === 0 ? (
+                <div className="py-12 text-center text-slate-500 text-xs">
+                  Aún no hay referencias creadas. Utiliza el formulario arriba para agregar la primera.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {adminFeedList
+                    .filter((item) => {
+                      if (!feedSearchTerm.trim()) return true;
+                      const q = feedSearchTerm.toLowerCase();
+                      return (
+                        (item.nickname_anonimo || "").toLowerCase().includes(q) ||
+                        (item.descripcion_entrega || "").toLowerCase().includes(q) ||
+                        (item.comentario_cliente || "").toLowerCase().includes(q) ||
+                        (item.categoria || "").toLowerCase().includes(q)
+                      );
+                    })
+                    .map((item) => (
+                      <div
+                        key={item.id}
+                        className={`p-4 rounded-2xl border transition-all flex flex-col justify-between space-y-3 ${
+                          item.aprobado_admin
+                            ? "bg-slate-950/80 border-slate-800 hover:border-fuchsia-500/40"
+                            : "bg-slate-950/40 border-slate-900 opacity-60"
+                        }`}
+                      >
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-xs text-white truncate max-w-[150px]">
+                              {item.nickname_anonimo || "Cliente"}
+                            </span>
+                            <span className="text-[10px] font-mono text-slate-500">
+                              {new Date(item.creado_en).toLocaleDateString("es-ES", {
+                                day: "2-digit",
+                                month: "short",
+                              })}
+                            </span>
+                          </div>
+
+                          {item.imagen_url && (
+                            <div className="w-full h-32 rounded-xl overflow-hidden bg-black/50 border border-slate-800 relative">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={item.imagen_url} alt="Comprobante" className="w-full h-full object-cover" />
+                            </div>
+                          )}
+
+                          <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800/80">
+                            <span className="text-[10px] text-fuchsia-400 font-bold block mb-0.5">
+                              {item.categoria || "Gaming"}
+                            </span>
+                            <p className="text-xs font-bold text-white line-clamp-2">
+                              {item.descripcion_entrega}
+                            </p>
+                          </div>
+
+                          {item.comentario_cliente && (
+                            <p className="text-[11px] text-slate-400 italic line-clamp-2">
+                              "{item.comentario_cliente}"
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="pt-2 border-t border-slate-800 flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            {/* Toggle de visibilidad */}
+                            <button
+                              type="button"
+                              onClick={() => handleToggleFeedItemApproval(item.id, item.aprobado_admin)}
+                              className={`px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 transition ${
+                                item.aprobado_admin
+                                  ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                                  : "bg-slate-800 text-slate-400 border border-slate-700"
+                              }`}
+                            >
+                              {item.aprobado_admin ? (
+                                <>
+                                  <Eye className="w-3 h-3" />
+                                  <span>Público</span>
+                                </>
+                              ) : (
+                                <>
+                                  <EyeOff className="w-3 h-3" />
+                                  <span>Oculto</span>
+                                </>
+                              )}
+                            </button>
+
+                            <span className="text-[10px] font-mono text-slate-500 flex items-center gap-0.5">
+                              <Heart className="w-2.5 h-2.5 text-rose-400" />
+                              {item.likes_count || 0}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-1">
+                            <Link
+                              href={`/feed#delivery-${item.id}`}
+                              target="_blank"
+                              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition"
+                              title="Ver en Feed"
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                            </Link>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteFeedReference(item.id)}
+                              className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 transition"
+                              title="Eliminar referencia"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
