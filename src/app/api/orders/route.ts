@@ -3,6 +3,40 @@ import { sql } from "@/lib/db";
 import { createClient } from "@/lib/supabase/server";
 import { notifyAdmins, sendPushNotification, sendDirectPush } from "@/utils/web-push";
 import { interpolateTemplate, DEFAULT_NOTIFICATION_TEMPLATES } from "@/utils/notifications-template";
+export const dynamic = "force-dynamic";
+
+// GET: Obtener las órdenes del usuario autenticado
+export async function GET() {
+  try {
+    const supabase = await createClient();
+    const { data: { user }, error } = await supabase.auth.getUser();
+    if (error || !user) {
+      return NextResponse.json({ orders: [] });
+    }
+
+    const orders = await sql`
+      SELECT 
+        p.id, p.estado, p.total_usd, p.total_ves, p.total_mxn, p.moneda_pago, p.creado_en,
+        pi.id as item_id, pi.producto_id, pi.variante_id, pi.player_id, pi.region,
+        pi.precio_unitario, pi.estado as item_estado,
+        prod.nombre as producto_nombre,
+        v.nombre as variante_nombre
+      FROM public.pedidos p
+      JOIN public.pedidos_items pi ON p.id = pi.pedido_id
+      JOIN public.productos prod ON pi.producto_id = prod.id
+      LEFT JOIN public.variantes_producto v ON pi.variante_id = v.id
+      WHERE p.usuario_id = ${user.id}
+      ORDER BY p.creado_en DESC
+      LIMIT 100
+    `;
+
+    return NextResponse.json({ orders });
+  } catch (error: any) {
+    console.error("Error fetching user orders:", error);
+    return NextResponse.json({ orders: [] });
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();

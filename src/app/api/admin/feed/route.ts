@@ -31,6 +31,9 @@ export async function GET() {
         fe.imagen_url,
         fe.avatar_url,
         COALESCE(fe.categoria, 'General') as categoria,
+        COALESCE(fe.etiqueta, 'Completado') as etiqueta,
+        COALESCE(fe.pais, 'General') as pais,
+        fe.pedido_id,
         COALESCE(fe.likes_count, 0)::int as likes_count,
         fe.aprobado_admin,
         fe.creado_en,
@@ -89,15 +92,19 @@ export async function POST(request: Request) {
       imagen_url,
       avatar_url,
       categoria = "General",
+      etiqueta = "Completado",
+      pais = "General",
       aprobado_admin = true,
     } = body;
 
-    const safeNickname = (nickname_anonimo || "Cliente Verificado").trim().slice(0, 50);
+    const safeNickname = (nickname_anonimo || "Administrador").trim().slice(0, 50);
     const safeDescripcion = (descripcion_entrega || "Recarga Despachada").trim().slice(0, 255);
     const safeComentario = comentario_cliente ? String(comentario_cliente).trim().slice(0, 500) : null;
     const safeImagen = imagen_url ? String(imagen_url).trim() : null;
     const safeAvatar = avatar_url ? String(avatar_url).trim() : null;
     const safeCategoria = String(categoria).trim().slice(0, 50);
+    const safeEtiqueta = String(etiqueta).trim().slice(0, 50);
+    const safePais = String(pais).trim().slice(0, 20);
 
     const [nueva] = await sql`
       INSERT INTO public.feed_entregas (
@@ -107,6 +114,8 @@ export async function POST(request: Request) {
         imagen_url,
         avatar_url,
         categoria,
+        etiqueta,
+        pais,
         aprobado_admin,
         likes_count
       )
@@ -117,6 +126,8 @@ export async function POST(request: Request) {
         ${safeImagen},
         ${safeAvatar},
         ${safeCategoria},
+        ${safeEtiqueta},
+        ${safePais},
         ${Boolean(aprobado_admin)},
         0
       )
@@ -137,7 +148,7 @@ export async function POST(request: Request) {
   }
 }
 
-// DELETE: Eliminar una referencia del feed
+// DELETE: Eliminar una publicación, un comentario o remover solo una foto
 export async function DELETE(request: Request) {
   try {
     const supabase = await createClient();
@@ -157,11 +168,38 @@ export async function DELETE(request: Request) {
 
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
+    const comentarioId = searchParams.get("comentario_id");
+    const removerFoto = searchParams.get("remover_foto") === "true";
+
+    // 1. Moderación: Borrar un comentario específico
+    if (comentarioId) {
+      await sql`
+        DELETE FROM public.feed_comentarios WHERE id = ${comentarioId}::uuid
+      `;
+      return NextResponse.json({
+        success: true,
+        message: "Comentario eliminado correctamente por el administrador.",
+      });
+    }
 
     if (!id) {
       return NextResponse.json({ error: "El ID es requerido" }, { status: 400 });
     }
 
+    // 2. Moderación: Remover solo la foto de la publicación
+    if (removerFoto) {
+      await sql`
+        UPDATE public.feed_entregas
+        SET imagen_url = NULL
+        WHERE id = ${id}::uuid
+      `;
+      return NextResponse.json({
+        success: true,
+        message: "Foto eliminada de la publicación correctamente.",
+      });
+    }
+
+    // 3. Borrar la publicación completa junto con comentarios y likes
     await sql`
       DELETE FROM public.feed_comentarios WHERE feed_id = ${id}::uuid
     `;
@@ -174,14 +212,13 @@ export async function DELETE(request: Request) {
 
     return NextResponse.json({
       success: true,
-      message: "Referencia eliminada correctamente",
+      message: "Publicación eliminada correctamente del Feed.",
     });
   } catch (error: any) {
     console.error("Error in DELETE /api/admin/feed:", error);
     return NextResponse.json(
-      { error: "Error al eliminar referencia", details: error.message },
+      { error: "Error al procesar eliminación", details: error.message },
       { status: 500 }
     );
   }
 }
-

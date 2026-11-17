@@ -51,12 +51,15 @@ import {
   Gamepad2,
   Bell,
   MessageSquare,
-  Heart
+  Heart,
+  Coins
 } from "lucide-react";
 import ImageUploadInput from "@/components/ImageUploadInput";
 import DynamicFieldsBuilder, { DynamicFieldItem } from "@/components/DynamicFieldsBuilder";
 import { subscribeCurrentDevice } from "@/components/PushNotificationManager";
 import { DEFAULT_NOTIFICATION_TEMPLATES, interpolateTemplate } from "@/utils/notifications-template";
+import AdminPricesManager from "@/components/admin/AdminPricesManager";
+import AdminResellersControl from "@/components/admin/AdminResellersControl";
 
 interface Category {
   id: string;
@@ -360,12 +363,12 @@ function RankPricingSection({
 }
 
 export default function AdminDashboardPage() {
-  const [activeTab, setActiveTab] = useState<"pedidos" | "feed" | "catalogo" | "pagos" | "finanzas" | "usuarios" | "tasas" | "boveda" | "notificaciones">("pedidos");
+  const [activeTab, setActiveTab] = useState<"pedidos" | "feed" | "catalogo" | "precios" | "revendedores" | "pagos" | "finanzas" | "usuarios" | "tasas" | "boveda" | "notificaciones">("pedidos");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [ordersPage, setOrdersPage] = useState(1);
   const [usersPage, setUsersPage] = useState(1);
 
-  const handleNavigateTab = (tab: "pedidos" | "feed" | "catalogo" | "pagos" | "finanzas" | "usuarios" | "tasas" | "boveda" | "notificaciones") => {
+  const handleNavigateTab = (tab: "pedidos" | "feed" | "catalogo" | "precios" | "revendedores" | "pagos" | "finanzas" | "usuarios" | "tasas" | "boveda" | "notificaciones") => {
     setActiveTab(tab);
     setMobileNavOpen(false);
     if (typeof window !== "undefined") {
@@ -1641,6 +1644,45 @@ export default function AdminDashboardPage() {
     }
   };
 
+  const handleRemoveFeedPhoto = async (id: string) => {
+    if (!confirm("¿Seguro que deseas eliminar la foto de esta publicación?")) return;
+    try {
+      const res = await fetch(`/api/admin/feed?id=${id}&remover_foto=true`, { method: "DELETE" });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setAdminFeedList((prev) => prev.map((item) => (item.id === id ? { ...item, imagen_url: null } : item)));
+        showNotification("success", "Foto eliminada de la publicación correctamente.");
+      } else {
+        showNotification("error", data.error || "Error al eliminar foto");
+      }
+    } catch {
+      showNotification("error", "Error de red al eliminar foto");
+    }
+  };
+
+  const handleDeleteFeedComment = async (feedId: string, commentId: string) => {
+    if (!confirm("¿Seguro que deseas eliminar este comentario?")) return;
+    try {
+      const res = await fetch(`/api/admin/feed?comentario_id=${commentId}`, { method: "DELETE" });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setAdminFeedList((prev) =>
+          prev.map((item) => {
+            if (item.id === feedId && Array.isArray(item.comentarios)) {
+              return { ...item, comentarios: item.comentarios.filter((c: any) => c.id !== commentId) };
+            }
+            return item;
+          })
+        );
+        showNotification("success", "Comentario eliminado correctamente.");
+      } else {
+        showNotification("error", data.error || "Error al eliminar comentario");
+      }
+    } catch {
+      showNotification("error", "Error de red al eliminar comentario");
+    }
+  };
+
   useEffect(() => {
     if (activeTab === "feed") {
       fetchAdminFeed();
@@ -1651,7 +1693,7 @@ export default function AdminDashboardPage() {
     if (typeof window !== "undefined") {
       const urlParams = new URLSearchParams(window.location.search);
       const tabParam = urlParams.get("tab");
-      const validTabs = ["pedidos", "feed", "catalogo", "pagos", "finanzas", "usuarios", "tasas", "boveda", "notificaciones"];
+      const validTabs = ["pedidos", "feed", "catalogo", "precios", "revendedores", "pagos", "finanzas", "usuarios", "tasas", "boveda", "notificaciones"];
       if (tabParam && validTabs.includes(tabParam)) {
         setActiveTab(tabParam as any);
       }
@@ -2513,6 +2555,8 @@ export default function AdminDashboardPage() {
             { id: "pedidos", label: "Gestión de Pedidos & Despachos", icon: ShoppingBag, badge: orders.filter((o) => o.item_estado === "EN_COLA").length },
             { id: "feed", label: "Referencias & Feed en Vivo", icon: MessageSquare, badge: adminFeedList.length },
             { id: "catalogo", label: "Gestor de Catálogo Dinámico", icon: Package },
+            { id: "precios", label: "Gestor de Precios Multi-Rango", icon: Coins },
+            { id: "revendedores", label: "Control de Revendedores B2B", icon: ShieldCheck },
             { id: "finanzas", label: "Dashboard Financiero", icon: BarChart3 },
             { id: "usuarios", label: "Gestor de Usuarios", icon: Users },
             { id: "tasas", label: "Multidivisa & Suiche P2P", icon: DollarSign },
@@ -2639,6 +2683,34 @@ export default function AdminDashboardPage() {
             <Package className="w-4 h-4" />
             <span>Gestor de Catálogo Dinámico</span>
           </button>
+
+          {!isDesigner && (
+            <>
+              <button
+                onClick={() => handleNavigateTab("precios")}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
+                  activeTab === "precios"
+                    ? "bg-fuchsia-600 text-white shadow-glow"
+                    : "text-slate-400 hover:text-white glass-panel"
+                }`}
+              >
+                <Coins className="w-4 h-4 text-yellow-400" />
+                <span>Gestor de Precios</span>
+              </button>
+
+              <button
+                onClick={() => handleNavigateTab("revendedores")}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
+                  activeTab === "revendedores"
+                    ? "bg-fuchsia-600 text-white shadow-glow"
+                    : "text-slate-400 hover:text-white glass-panel"
+                }`}
+              >
+                <ShieldCheck className="w-4 h-4 text-amber-400" />
+                <span>Control de Revendedores</span>
+              </button>
+            </>
+          )}
 
           {!isDesigner && (
             <>
@@ -3411,11 +3483,33 @@ export default function AdminDashboardPage() {
                           </div>
 
                           {item.imagen_url && (
-                            <div className="w-full h-32 rounded-xl overflow-hidden bg-black/50 border border-slate-800 relative">
+                            <div className="w-full h-32 rounded-xl overflow-hidden bg-black/50 border border-slate-800 relative group">
                               {/* eslint-disable-next-line @next/next/no-img-element */}
                               <img src={item.imagen_url} alt="Comprobante" className="w-full h-full object-cover" />
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveFeedPhoto(item.id)}
+                                className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/80 hover:bg-rose-600 text-rose-400 hover:text-white text-[10px] font-bold transition flex items-center gap-1 opacity-0 group-hover:opacity-100 shadow-md"
+                                title="Eliminar solo la foto"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                                <span>Quitar Foto</span>
+                              </button>
                             </div>
                           )}
+
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {item.etiqueta && (
+                              <span className="px-2 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 font-mono text-[9px] font-bold">
+                                🏷️ {item.etiqueta}
+                              </span>
+                            )}
+                            {item.pais && item.pais !== "General" && (
+                              <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 font-mono text-[9px] font-bold">
+                                📍 {item.pais}
+                              </span>
+                            )}
+                          </div>
 
                           <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800/80">
                             <span className="text-[10px] text-fuchsia-400 font-bold block mb-0.5">
@@ -3430,6 +3524,35 @@ export default function AdminDashboardPage() {
                             <p className="text-[11px] text-slate-400 italic line-clamp-2">
                               "{item.comentario_cliente}"
                             </p>
+                          )}
+
+                          {/* Lista de comentarios con moderación */}
+                          {Array.isArray(item.comentarios) && item.comentarios.length > 0 && (
+                            <div className="p-2 rounded-xl bg-black/40 border border-slate-800 space-y-1.5">
+                              <span className="text-[10px] font-mono text-slate-400 uppercase font-bold block">
+                                Comentarios ({item.comentarios.length}):
+                              </span>
+                              <div className="space-y-1 max-h-24 overflow-y-auto pr-1">
+                                {item.comentarios.map((c: any) => (
+                                  <div
+                                    key={c.id}
+                                    className="flex items-center justify-between text-[11px] text-slate-300 bg-slate-900/40 p-1.5 rounded-lg border border-white/5"
+                                  >
+                                    <span className="truncate max-w-[180px]">
+                                      <strong className="text-white">{c.autor_nombre}:</strong> {c.comentario}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteFeedComment(item.id, c.id)}
+                                      className="text-rose-400 hover:text-rose-300 p-0.5 ml-1 transition"
+                                      title="Borrar comentario"
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
                           )}
                         </div>
 
@@ -3488,6 +3611,24 @@ export default function AdminDashboardPage() {
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {/* ======================================================== */}
+        {/* TAB PRECIOS: GESTOR DE PRECIOS MULTI-RANGO Y DIVISAS     */}
+        {/* ======================================================== */}
+        {activeTab === "precios" && (
+          <div className="animate-in fade-in duration-200">
+            <AdminPricesManager />
+          </div>
+        )}
+
+        {/* ======================================================== */}
+        {/* TAB REVENDEDORES: CONTROL DE REVENDEDORES & DEPÓSITOS    */}
+        {/* ======================================================== */}
+        {activeTab === "revendedores" && (
+          <div className="animate-in fade-in duration-200">
+            <AdminResellersControl onNavigateToPrices={() => handleNavigateTab("precios")} />
           </div>
         )}
 

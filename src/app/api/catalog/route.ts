@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 
+export const dynamic = "force-dynamic";
+
 // API pública del catálogo (Solo devuelve elementos con activo = true)
 export async function GET() {
   try {
@@ -40,7 +42,14 @@ export async function GET() {
       ORDER BY orden ASC, creado_en ASC
     `;
 
-    return NextResponse.json({ categories, subcategories, products, variants });
+    const overrides = await sql`
+      SELECT producto_id, variante_id, rango, precio_usdt, precio_fijo,
+             precio_ref_ves, precio_fijo_ves, precio_ref_mxn, precio_fijo_mxn,
+             modo_ves, modo_mxn
+      FROM public.precios_override
+    `;
+
+    return NextResponse.json({ categories, subcategories, products, variants, overrides });
   } catch (error: any) {
     console.error("Error fetching catalog:", error);
     return NextResponse.json(

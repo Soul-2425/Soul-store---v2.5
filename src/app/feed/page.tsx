@@ -38,7 +38,12 @@ import {
   LogOut,
   ImageIcon,
   Lock,
-  UserCheck
+  UserCheck,
+  Package,
+  Bookmark,
+  Tag,
+  Globe,
+  ArrowRight
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import ImageUploadInput from "@/components/ImageUploadInput";
@@ -58,6 +63,9 @@ export interface FeedItem {
   imagen_url?: string | null;
   avatar_url?: string | null;
   categoria?: string | null;
+  etiqueta?: string | null;
+  pais?: string | null;
+  pedido_id?: string | null;
   likes_count: number;
   creado_en: string;
   aprobado_admin?: boolean;
@@ -161,15 +169,24 @@ export default function FeedPage() {
   // Visor de Perfil / Historia de Administrador
   const [selectedAdmin, setSelectedAdmin] = useState<AdminProfileStory | null>(null);
 
-  // Modal para Publicar en Feed
+  // Modal para Publicar en Feed (Ligado a compras completadas)
   const [publishModalOpen, setPublishModalOpen] = useState(false);
   const [pubNickname, setPubNickname] = useState("");
   const [pubCategoria, setPubCategoria] = useState("Free Fire");
   const [pubDescripcion, setPubDescripcion] = useState("");
   const [pubComentario, setPubComentario] = useState("");
   const [pubImagenUrl, setPubImagenUrl] = useState("");
+  const [pubEtiqueta, setPubEtiqueta] = useState("Completado");
+  const [pubPais, setPubPais] = useState("General");
+  const [pubCustomEtiqueta, setPubCustomEtiqueta] = useState("");
+  const [selectedCompletedOrder, setSelectedCompletedOrder] = useState<any | null>(null);
   const [publishing, setPublishing] = useState(false);
   const [publishFeedback, setPublishFeedback] = useState<{ message: string; autoAprobado: boolean } | null>(null);
+
+  // Órdenes del usuario e Historial de Recargas
+  const [myOrders, setMyOrders] = useState<any[]>([]);
+  const [ordersModalOpen, setOrdersModalOpen] = useState(false);
+  const [activeBottomTab, setActiveBottomTab] = useState<"feed" | "my_posts">("feed");
 
   // Modal de Perfil de Usuario
   const [profileModalOpen, setProfileModalOpen] = useState(false);
@@ -210,6 +227,20 @@ export default function FeedPage() {
     };
     checkUser();
   }, [supabase]);
+
+  // Cargar pedidos del usuario para vincular al feed
+  useEffect(() => {
+    if (currentUser) {
+      fetch("/api/orders")
+        .then((res) => res.json())
+        .then((data) => {
+          if (data && Array.isArray(data.orders)) {
+            setMyOrders(data.orders);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [currentUser]);
 
   // 2. Cargar likes almacenados localmente
   useEffect(() => {
@@ -383,6 +414,9 @@ export default function FeedPage() {
           descripcion_entrega: pubDescripcion.trim(),
           comentario_cliente: pubComentario.trim() || null,
           categoria: pubCategoria,
+          etiqueta: pubEtiqueta === "OTRA" ? (pubCustomEtiqueta.trim() || "Comunidad") : pubEtiqueta,
+          pais: pubPais,
+          pedido_id: selectedCompletedOrder?.id || null,
           imagen_url: pubImagenUrl.trim() || null,
           avatar_url: currentUser?.avatar_url || null,
           es_admin: currentUser?.rango === "admin",
@@ -531,12 +565,13 @@ export default function FeedPage() {
   }, [filteredItems, currentPage]);
 
   return (
-    <div className="min-h-screen bg-[#07090E] text-white selection:bg-[#FF007F] selection:text-white relative overflow-x-hidden font-sans">
+    <div className="min-h-screen bg-[#06070B] bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(120,40,200,0.18),rgba(255,255,255,0))] text-white selection:bg-[#FF007F] selection:text-white relative overflow-x-hidden font-sans pb-24 md:pb-8">
       
-      {/* Luces de ambiente sutiles */}
+      {/* Luces de ambiente y malla estética de red social */}
       <div className="fixed inset-0 pointer-events-none z-0">
-        <div className="absolute top-[-10%] left-1/2 -translate-x-1/2 w-[750px] h-[500px] bg-gradient-to-b from-[#FF007F]/10 via-[#FFF01F]/5 to-transparent blur-[140px] rounded-full" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-gradient-to-t from-cyan-500/10 to-transparent blur-[140px] rounded-full" />
+        <div className="absolute top-[-10%] left-1/2 -translate-x-1/2 w-[850px] h-[550px] bg-gradient-to-b from-[#7928CA]/15 via-[#FF007F]/10 to-transparent blur-[150px] rounded-full" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[550px] h-[550px] bg-gradient-to-t from-cyan-500/10 via-[#FFF01F]/5 to-transparent blur-[150px] rounded-full" />
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px),linear-gradient(to_bottom,#ffffff03_1px,transparent_1px)] bg-[size:32px_32px]" />
       </div>
 
       {/* ========================================================================= */}
@@ -899,11 +934,23 @@ export default function FeedPage() {
                         </div>
                       </div>
 
-                      {/* Badge de Categoría / Estado */}
-                      <span className="px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-[11px] font-bold font-mono text-emerald-400 flex items-center gap-1">
-                        <Check className="w-3 h-3 stroke-[3]" />
-                        <span>Despachado</span>
-                      </span>
+                      {/* Badges de Categoría, País y Etiquetas */}
+                      <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                        {item.etiqueta && (
+                          <span className="px-2 py-0.5 rounded-full bg-cyan-500/15 border border-cyan-500/30 text-[10px] font-bold font-mono text-cyan-300">
+                            🏷️ {item.etiqueta}
+                          </span>
+                        )}
+                        {item.pais && item.pais !== "General" && (
+                          <span className="px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-[10px] font-bold font-mono text-amber-300">
+                            📍 {item.pais}
+                          </span>
+                        )}
+                        <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-[10px] font-bold font-mono text-emerald-400 flex items-center gap-1">
+                          <Check className="w-3 h-3 stroke-[3]" />
+                          <span>Despachado</span>
+                        </span>
+                      </div>
                     </div>
 
                     {/* Cuerpo del Post: Foto o Tarjeta Visual de la Recarga */}
@@ -1227,112 +1274,205 @@ export default function FeedPage() {
               </button>
             </div>
 
-            {publishFeedback ? (
-              <div className="py-8 text-center space-y-3">
-                <div className="w-12 h-12 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto border border-emerald-500/30">
-                  <CheckCircle2 className="w-6 h-6 animate-pulse" />
-                </div>
-                <h4 className="text-base font-black text-white">
-                  {publishFeedback.autoAprobado ? "¡Publicación Aprobada y en Vivo!" : "¡Publicación Enviada con Éxito!"}
-                </h4>
-                <p className="text-xs text-zinc-300 max-w-xs mx-auto leading-relaxed">
-                  {publishFeedback.message}
-                </p>
-              </div>
-            ) : (
-              <form onSubmit={handleCreatePublish} className="space-y-4 text-xs">
-                <div>
-                  <label className="font-bold text-zinc-300 block mb-1">Tu Nickname o Nombre:</label>
-                  <input
-                    type="text"
-                    required
-                    value={pubNickname}
-                    onChange={(e) => setPubNickname(e.target.value)}
-                    placeholder="Ej: Dany99, CarlosGamer"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-black/60 border border-white/10 text-white outline-none focus:border-[#FF007F]"
-                  />
-                </div>
+            {(() => {
+              const completedOrders = myOrders.filter((o) => o.estado === "COMPLETADO");
+              const canPublish = currentUser?.rango === "admin" || completedOrders.length > 0;
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="font-bold text-zinc-300 block mb-1">Categoría / Juego:</label>
-                    <select
-                      value={pubCategoria}
-                      onChange={(e) => setPubCategoria(e.target.value)}
-                      className="w-full px-3 py-2.5 rounded-xl bg-black/60 border border-white/10 text-white outline-none focus:border-[#FF007F]"
-                    >
-                      <option value="Free Fire">Free Fire</option>
-                      <option value="Blood Strike">Blood Strike</option>
-                      <option value="Roblox">Roblox</option>
-                      <option value="Call of Duty">Call of Duty</option>
-                      <option value="Streaming">Streaming</option>
-                      <option value="General">General</option>
-                    </select>
+              if (publishFeedback) {
+                return (
+                  <div className="py-8 text-center space-y-3">
+                    <div className="w-12 h-12 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto border border-emerald-500/30">
+                      <CheckCircle2 className="w-6 h-6 animate-pulse" />
+                    </div>
+                    <h4 className="text-base font-black text-white">
+                      {publishFeedback.autoAprobado ? "¡Publicación Aprobada y en Vivo!" : "¡Publicación Enviada con Éxito!"}
+                    </h4>
+                    <p className="text-xs text-zinc-300 max-w-xs mx-auto leading-relaxed">
+                      {publishFeedback.message}
+                    </p>
                   </div>
+                );
+              }
+
+              if (!canPublish) {
+                return (
+                  <div className="py-6 text-center space-y-4">
+                    <div className="w-12 h-12 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-400 flex items-center justify-center mx-auto">
+                      <ShieldCheck className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h4 className="text-base font-black text-white">Requiere al menos 1 Pedido Completado</h4>
+                      <p className="text-xs text-zinc-300 max-w-sm mx-auto mt-1 leading-relaxed">
+                        Para que todas las opiniones de la comunidad sean 100% legítimas y transparentes, debes haber realizado al menos una recarga despachada en Soul Store antes de publicar en el feed.
+                      </p>
+                    </div>
+                    <div className="pt-2 flex items-center justify-center gap-3">
+                      <Link
+                        href="/"
+                        className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#FFF01F] to-amber-400 text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg flex items-center gap-1.5 hover:brightness-110 transition"
+                      >
+                        <ShoppingBag className="w-4 h-4" />
+                        <span>Ver Catálogo de Juegos</span>
+                      </Link>
+                    </div>
+                  </div>
+                );
+              }
+
+              return (
+                <form onSubmit={handleCreatePublish} className="space-y-4 text-xs">
+                  {/* Selector de Recarga Completada vinculada */}
+                  {completedOrders.length > 0 && (
+                    <div>
+                      <label className="font-bold text-amber-300 block mb-1">
+                        📦 Selecciona tu Recarga Completada a Reseñar (*):
+                      </label>
+                      <select
+                        onChange={(e) => {
+                          const order = completedOrders.find((o) => o.id === e.target.value);
+                          if (order) {
+                            setSelectedCompletedOrder(order);
+                            setPubDescripcion(`${order.producto_nombre}${order.variante_nombre ? " - " + order.variante_nombre : ""}`);
+                            if (order.moneda_pago === "VES") setPubPais("Venezuela");
+                            if (order.moneda_pago === "MXN") setPubPais("México");
+                          }
+                        }}
+                        className="w-full px-3 py-2.5 rounded-xl bg-black/60 border border-amber-500/40 text-white font-medium outline-none focus:border-[#FF007F]"
+                      >
+                        <option value="">-- Elige una de tus recargas completadas --</option>
+                        {completedOrders.map((o) => (
+                          <option key={o.id} value={o.id}>
+                            {o.producto_nombre} {o.variante_nombre ? `(${o.variante_nombre})` : ""} - {new Date(o.creado_en).toLocaleDateString()}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
 
                   <div>
-                    <label className="font-bold text-zinc-300 block mb-1">Recarga Recibida (*):</label>
+                    <label className="font-bold text-zinc-300 block mb-1">Tu Nickname o Nombre:</label>
                     <input
                       type="text"
                       required
-                      value={pubDescripcion}
-                      onChange={(e) => setPubDescripcion(e.target.value)}
-                      placeholder="Ej: 2180+218 Diamantes"
+                      value={pubNickname}
+                      onChange={(e) => setPubNickname(e.target.value)}
+                      placeholder="Ej: Dany99, CarlosGamer"
                       className="w-full px-3.5 py-2.5 rounded-xl bg-black/60 border border-white/10 text-white outline-none focus:border-[#FF007F]"
                     />
                   </div>
-                </div>
 
-                <div>
-                  <label className="font-bold text-zinc-300 block mb-1">Tu Opinión / Comentario:</label>
-                  <textarea
-                    rows={3}
-                    value={pubComentario}
-                    onChange={(e) => setPubComentario(e.target.value)}
-                    placeholder="Cuéntale a la comunidad cómo fue tu entrega (ej: ¡Llegó al instante en menos de 2 minutos!)..."
-                    className="w-full px-3.5 py-2 rounded-xl bg-black/60 border border-white/10 text-white outline-none focus:border-[#FF007F] resize-none"
-                  />
-                </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="font-bold text-zinc-300 block mb-1">Categoría / Juego:</label>
+                      <select
+                        value={pubCategoria}
+                        onChange={(e) => setPubCategoria(e.target.value)}
+                        className="w-full px-3 py-2.5 rounded-xl bg-black/60 border border-white/10 text-white outline-none focus:border-[#FF007F]"
+                      >
+                        <option value="Free Fire">Free Fire</option>
+                        <option value="Blood Strike">Blood Strike</option>
+                        <option value="Roblox">Roblox</option>
+                        <option value="Call of Duty">Call of Duty</option>
+                        <option value="Streaming">Streaming</option>
+                        <option value="General">General</option>
+                      </select>
+                    </div>
 
-                {/* Subida de Fotos y Capturas para la Publicación */}
-                <div>
-                  <ImageUploadInput
-                    label="📷 Sube la Foto / Captura de tu Entrega:"
-                    value={pubImagenUrl}
-                    onChange={setPubImagenUrl}
-                    placeholder="https://ejemplo.com/captura.jpg"
-                    helperText="Toca arriba para elegir una captura desde tu galería o computadora (se verá como foto de Instagram)"
-                  />
-                </div>
+                    <div>
+                      <label className="font-bold text-zinc-300 block mb-1">Recarga Recibida (*):</label>
+                      <input
+                        type="text"
+                        required
+                        value={pubDescripcion}
+                        onChange={(e) => setPubDescripcion(e.target.value)}
+                        placeholder="Ej: 2180+218 Diamantes"
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-black/60 border border-white/10 text-white outline-none focus:border-[#FF007F]"
+                      />
+                    </div>
+                  </div>
 
-                <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-300 flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4 shrink-0 text-amber-400" />
-                  <span>
-                    {currentUser?.rango === "admin"
-                      ? "👑 Modo Administrador: Tu publicación se aprobará y mostrará inmediatamente."
-                      : "Nota: Por seguridad, tu publicación pasará por aprobación del administrador antes de aparecer en el feed."}
-                  </span>
-                </div>
+                  {/* Etiquetas y País */}
+                  <div className="space-y-2">
+                    <label className="font-bold text-zinc-300 block">Etiqueta de la Publicación:</label>
+                    <div className="flex flex-wrap gap-2">
+                      {["Completado", "Referencias", "Venezuela", "México", "OTRA"].map((tag) => (
+                        <button
+                          key={tag}
+                          type="button"
+                          onClick={() => setPubEtiqueta(tag)}
+                          className={`px-3 py-1.5 rounded-xl font-bold text-xs transition border ${
+                            pubEtiqueta === tag
+                              ? "bg-[#FF007F] text-white border-pink-400 shadow-md"
+                              : "bg-black/50 text-zinc-400 border-white/10 hover:text-white"
+                          }`}
+                        >
+                          {tag === "OTRA" ? "+ Crear Etiqueta" : tag}
+                        </button>
+                      ))}
+                    </div>
 
-                <div className="pt-2 flex items-center justify-end gap-2.5">
-                  <button
-                    type="button"
-                    onClick={() => setPublishModalOpen(false)}
-                    className="px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white transition font-bold"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={publishing || !pubDescripcion.trim()}
-                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#FF007F] to-[#D61A1A] hover:brightness-110 disabled:opacity-40 text-white font-black text-xs uppercase tracking-wider transition shadow-lg flex items-center gap-1.5"
-                  >
-                    {publishing && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
-                    <span>{publishing ? "Enviando..." : "Publicar"}</span>
-                  </button>
-                </div>
-              </form>
-            )}
+                    {pubEtiqueta === "OTRA" && (
+                      <input
+                        type="text"
+                        placeholder="Escribe el nombre de tu nueva etiqueta (sujeta a aprobación)"
+                        value={pubCustomEtiqueta}
+                        onChange={(e) => setPubCustomEtiqueta(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl bg-black/60 border border-pink-500/50 text-white outline-none text-xs"
+                      />
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-zinc-300 block mb-1">Tu Opinión / Comentario:</label>
+                    <textarea
+                      rows={3}
+                      value={pubComentario}
+                      onChange={(e) => setPubComentario(e.target.value)}
+                      placeholder="Cuéntale a la comunidad cómo fue tu entrega (ej: ¡Llegó al instante en menos de 2 minutos!)..."
+                      className="w-full px-3.5 py-2 rounded-xl bg-black/60 border border-white/10 text-white outline-none focus:border-[#FF007F] resize-none"
+                    />
+                  </div>
+
+                  {/* Subida de Fotos y Capturas para la Publicación */}
+                  <div>
+                    <ImageUploadInput
+                      label="📷 Sube la Foto / Captura de tu Entrega:"
+                      value={pubImagenUrl}
+                      onChange={setPubImagenUrl}
+                      placeholder="https://ejemplo.com/captura.jpg"
+                      helperText="Toca arriba para elegir una captura desde tu galería o computadora (se verá como foto de Instagram)"
+                    />
+                  </div>
+
+                  <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-300 flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 shrink-0 text-amber-400" />
+                    <span>
+                      {currentUser?.rango === "admin"
+                        ? "👑 Modo Administrador: Tu publicación se aprobará y mostrará inmediatamente."
+                        : "Nota: Por seguridad, tu publicación pasará por aprobación del administrador antes de aparecer en el feed."}
+                    </span>
+                  </div>
+
+                  <div className="pt-2 flex items-center justify-end gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setPublishModalOpen(false)}
+                      className="px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white transition font-bold"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={publishing || !pubDescripcion.trim()}
+                      className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#FF007F] to-[#D61A1A] hover:brightness-110 disabled:opacity-40 text-white font-black text-xs uppercase tracking-wider transition shadow-lg flex items-center gap-1.5"
+                    >
+                      {publishing && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                      <span>{publishing ? "Enviando..." : "Publicar"}</span>
+                    </button>
+                  </div>
+                </form>
+              );
+            })()}
 
           </div>
         </div>
@@ -1527,7 +1667,182 @@ export default function FeedPage() {
       )}
 
       {/* ========================================================================= */}
-      {/* 8. FOOTER                                                                 */}
+      {/* 8. MODAL DE MIS RECARGAS                                                  */}
+      {/* ========================================================================= */}
+      {ordersModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
+          <div className="w-full max-w-lg p-6 rounded-3xl bg-[#0B0D13] border border-white/20 shadow-2xl relative my-8 text-white space-y-4">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <div className="flex items-center gap-2">
+                <Package className="w-5 h-5 text-amber-400" />
+                <h3 className="text-base font-black text-white">Mis Recargas y Pedidos</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOrdersModalOpen(false)}
+                className="p-1 rounded-xl text-zinc-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
+              {myOrders.length === 0 ? (
+                <div className="py-12 text-center text-zinc-500 text-xs">
+                  Aún no tienes recargas registradas en tu cuenta.
+                </div>
+              ) : (
+                myOrders.map((order) => (
+                  <div
+                    key={order.id}
+                    className="p-3 rounded-2xl bg-white/[0.03] border border-white/10 flex items-center justify-between gap-3 text-xs"
+                  >
+                    <div className="min-w-0">
+                      <span className="font-bold text-white block truncate">
+                        {order.producto_nombre} {order.variante_nombre ? `(${order.variante_nombre})` : ""}
+                      </span>
+                      <span className="text-[10px] text-zinc-400 font-mono block">
+                        {new Date(order.creado_en).toLocaleString()} • {order.moneda_pago}
+                      </span>
+                      {order.player_id && (
+                        <span className="text-[10px] font-mono text-amber-400 block truncate">
+                          ID: {order.player_id}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="text-right shrink-0">
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase block mb-1 ${
+                          order.estado === "COMPLETADO"
+                            ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                            : order.estado === "PROCESANDO" || order.estado === "EN_COLA"
+                            ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                            : "bg-zinc-800 text-zinc-400"
+                        }`}
+                      >
+                        {order.estado}
+                      </span>
+                      <span className="font-mono text-zinc-300 font-extrabold text-xs">
+                        ${Number(order.total_usd).toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="pt-2 border-t border-white/10 text-center">
+              <Link
+                href="/"
+                className="text-xs text-[#FFF01F] hover:underline font-bold inline-flex items-center gap-1"
+              >
+                <span>Hacer una nueva recarga en la tienda</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 9. BARRA INFERIOR DE NAVEGACIÓN MÓVIL ESTILO APP (BOTTOM NAV)              */}
+      {/* ========================================================================= */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#0B0D13]/95 backdrop-blur-2xl border-t border-white/10 px-2 py-1.5 flex items-center justify-around shadow-2xl">
+        {/* 1. Feed */}
+        <button
+          type="button"
+          onClick={() => {
+            setActiveBottomTab("feed");
+            setFilterTag("all");
+            setSearchQuery("");
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }}
+          className={`flex flex-col items-center gap-0.5 p-1.5 rounded-xl transition ${
+            activeBottomTab === "feed" && filterTag === "all" && !searchQuery
+              ? "text-[#FFF01F]"
+              : "text-zinc-400 hover:text-white"
+          }`}
+        >
+          <Flame className="w-5 h-5" />
+          <span className="text-[10px] font-bold">Feed</span>
+        </button>
+
+        {/* 2. Publicar */}
+        <button
+          type="button"
+          onClick={() => {
+            if (!currentUser) {
+              alert("Inicia sesión para publicar tu experiencia.");
+              return;
+            }
+            setPubNickname(currentUser.nickname || currentUser.nombre || "");
+            setPublishModalOpen(true);
+          }}
+          className="flex flex-col items-center gap-0.5 p-1.5 rounded-xl text-zinc-400 hover:text-white transition"
+        >
+          <div className="w-7 h-7 rounded-full bg-gradient-to-r from-[#FF007F] to-[#D61A1A] flex items-center justify-center text-white shadow-lg active:scale-95 transition">
+            <PlusCircle className="w-4 h-4" />
+          </div>
+          <span className="text-[10px] font-bold">Publicar</span>
+        </button>
+
+        {/* 3. Mis Recargas */}
+        <button
+          type="button"
+          onClick={() => {
+            if (!currentUser) {
+              alert("Inicia sesión para consultar tus recargas.");
+              return;
+            }
+            setOrdersModalOpen(true);
+          }}
+          className="flex flex-col items-center gap-0.5 p-1.5 rounded-xl text-zinc-400 hover:text-white transition"
+        >
+          <Package className="w-5 h-5 text-amber-400" />
+          <span className="text-[10px] font-bold">Mis Recargas</span>
+        </button>
+
+        {/* 4. Mis Posts */}
+        <button
+          type="button"
+          onClick={() => {
+            if (!currentUser) {
+              alert("Inicia sesión para ver tus publicaciones.");
+              return;
+            }
+            setActiveBottomTab("my_posts");
+            setSearchQuery(currentUser.nickname || "");
+          }}
+          className={`flex flex-col items-center gap-0.5 p-1.5 rounded-xl transition ${
+            activeBottomTab === "my_posts"
+              ? "text-[#FF007F]"
+              : "text-zinc-400 hover:text-white"
+          }`}
+        >
+          <Bookmark className="w-5 h-5" />
+          <span className="text-[10px] font-bold">Mis Posts</span>
+        </button>
+
+        {/* 5. Perfil */}
+        <button
+          type="button"
+          onClick={() => {
+            if (!currentUser) {
+              alert("Inicia sesión para ver tu perfil.");
+              return;
+            }
+            setProfileModalOpen(true);
+          }}
+          className="flex flex-col items-center gap-0.5 p-1.5 rounded-xl text-zinc-400 hover:text-white transition"
+        >
+          <User className="w-5 h-5 text-cyan-400" />
+          <span className="text-[10px] font-bold">Perfil</span>
+        </button>
+      </nav>
+
+      {/* ========================================================================= */}
+      {/* 10. FOOTER                                                                */}
       {/* ========================================================================= */}
       <footer className="max-w-3xl mx-auto px-4 py-8 border-t border-white/10 text-xs text-zinc-400 flex flex-col sm:flex-row items-center justify-between gap-4">
         <div className="flex items-center gap-2">
