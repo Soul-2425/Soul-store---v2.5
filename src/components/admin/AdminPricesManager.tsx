@@ -14,7 +14,9 @@ import {
   ArrowRight,
   ShieldAlert,
   Percent,
+  Sliders
 } from "lucide-react";
+import AdminRulesModal, { ResellerRule } from "./AdminRulesModal";
 
 interface Category {
   id: string;
@@ -75,17 +77,17 @@ interface Rates {
   tasa_mxn: number;
 }
 
-const RANGOS_LIST = [
-  { id: "cliente_4", label: "Cliente Nivel 4 (General / Nuevo)", tipo: "cliente", badge: "Base" },
-  { id: "cliente_3", label: "Cliente Nivel 3", tipo: "cliente", badge: "Nivel 3" },
-  { id: "cliente_2", label: "Cliente Nivel 2", tipo: "cliente", badge: "Nivel 2" },
-  { id: "cliente_1", label: "Cliente Nivel 1 (Frecuente)", tipo: "cliente", badge: "Nivel 1" },
-  { id: "cliente_especial", label: "Cliente Especial VIP", tipo: "cliente", badge: "VIP" },
-  { id: "revendedor_4", label: "Revendedor Nivel 4 (Desde 5 USDT)", tipo: "revendedor", badge: "Mín 5$" },
-  { id: "revendedor_3", label: "Revendedor Nivel 3 (Desde 25 USDT)", tipo: "revendedor", badge: "Mín 25$" },
-  { id: "revendedor_2", label: "Revendedor Nivel 2 (Desde 50 USDT)", tipo: "revendedor", badge: "Mín 50$" },
-  { id: "revendedor_1", label: "Revendedor Nivel 1 (Mayorista 100 USDT)", tipo: "revendedor", badge: "Mayorista" },
-  { id: "revendedor_especial", label: "Revendedor Especial VIP", tipo: "revendedor", badge: "VIP B2B" },
+const RANGOS_BASE = [
+  { id: "cliente_4", nombreBase: "Cliente Nivel 4", labelDefault: "Cliente Nivel 4 (General / Nuevo)", tipo: "cliente", badgeDefault: "Base" },
+  { id: "cliente_3", nombreBase: "Cliente Nivel 3", labelDefault: "Cliente Nivel 3", tipo: "cliente", badgeDefault: "Nivel 3" },
+  { id: "cliente_2", nombreBase: "Cliente Nivel 2", labelDefault: "Cliente Nivel 2", tipo: "cliente", badgeDefault: "Nivel 2" },
+  { id: "cliente_1", nombreBase: "Cliente Nivel 1", labelDefault: "Cliente Nivel 1 (Frecuente)", tipo: "cliente", badgeDefault: "Nivel 1" },
+  { id: "cliente_especial", nombreBase: "Cliente Especial VIP", labelDefault: "Cliente Especial VIP", tipo: "cliente", badgeDefault: "VIP" },
+  { id: "revendedor_4", nombreBase: "Revendedor Nivel 4", labelDefault: "Revendedor Nivel 4", tipo: "revendedor", badgeDefault: "Mín 5$" },
+  { id: "revendedor_3", nombreBase: "Revendedor Nivel 3", labelDefault: "Revendedor Nivel 3", tipo: "revendedor", badgeDefault: "Mín 25$" },
+  { id: "revendedor_2", nombreBase: "Revendedor Nivel 2", labelDefault: "Revendedor Nivel 2", tipo: "revendedor", badgeDefault: "Mín 50$" },
+  { id: "revendedor_1", nombreBase: "Revendedor Nivel 1", labelDefault: "Revendedor Nivel 1 (Mayorista)", tipo: "revendedor", badgeDefault: "Mayorista" },
+  { id: "revendedor_especial", nombreBase: "Revendedor Especial VIP", labelDefault: "Revendedor Especial VIP", tipo: "revendedor", badgeDefault: "VIP B2B" },
 ];
 
 export default function AdminPricesManager() {
@@ -98,6 +100,8 @@ export default function AdminPricesManager() {
   const [variants, setVariants] = useState<Variant[]>([]);
   const [rates, setRates] = useState<Rates>({ tasa_ves: 0, tasa_mxn: 0 });
   const [overrides, setOverrides] = useState<PriceOverride[]>([]);
+  const [rules, setRules] = useState<ResellerRule[]>([]);
+  const [rulesModalOpen, setRulesModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCat, setSelectedCat] = useState<string>("all");
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -116,6 +120,7 @@ export default function AdminPricesManager() {
       setVariants(data.variants || []);
       setRates(data.rates || { tasa_ves: 0, tasa_mxn: 0 });
       setOverrides(data.overrides || []);
+      setRules(data.rules || []);
     } catch (err: any) {
       setErrorMessage(err.message || "Error al cargar datos");
     } finally {
@@ -320,6 +325,16 @@ export default function AdminPricesManager() {
           <div className="flex items-center gap-3">
             <button
               type="button"
+              onClick={() => setRulesModalOpen(true)}
+              className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold text-xs flex items-center gap-2 border border-amber-500/30 transition shadow-sm"
+              title="Configurar mínimos de depósito y qué rangos exigen depósito"
+            >
+              <Sliders className="w-4 h-4 text-amber-400" />
+              <span>Configurar Mínimos de Depósito</span>
+            </button>
+
+            <button
+              type="button"
               onClick={handleSaveAll}
               disabled={saving}
               className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-fuchsia-600 to-pink-600 hover:brightness-110 active:scale-95 text-white font-black text-xs uppercase tracking-wider flex items-center gap-2 shadow-[0_0_15px_rgba(236,72,153,0.3)] transition disabled:opacity-50"
@@ -357,13 +372,41 @@ export default function AdminPricesManager() {
 
         {/* Selector de Rangos */}
         <div className="mt-6">
-          <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block mb-2">
-            Selecciona el Rango a Configurar:
-          </label>
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
+              Selecciona el Rango a Configurar:
+            </label>
+            <button
+              type="button"
+              onClick={() => setRulesModalOpen(true)}
+              className="text-[11px] font-semibold text-amber-400 hover:text-amber-300 flex items-center gap-1 transition"
+            >
+              <Sliders className="w-3 h-3" />
+              <span>Editar requisitos de depósito</span>
+            </button>
+          </div>
           <div className="flex flex-wrap gap-2">
-            {RANGOS_LIST.map((r) => {
+            {RANGOS_BASE.map((r) => {
               const isSelected = selectedRango === r.id;
               const isReseller = r.tipo === "revendedor";
+              const rule = rules.find((rl) => rl.rango === r.id);
+              
+              let label = r.labelDefault;
+              let badge = r.badgeDefault;
+              
+              if (rule) {
+                if (rule.nombre_nivel) {
+                  label = rule.deposito_minimo_usdt > 0 && rule.activo
+                    ? `${rule.nombre_nivel} (Desde ${rule.deposito_minimo_usdt} USDT)`
+                    : rule.nombre_nivel;
+                }
+                if (rule.activo && rule.deposito_minimo_usdt > 0) {
+                  badge = `Mín ${rule.deposito_minimo_usdt}$`;
+                } else if (!rule.activo) {
+                  badge = "Manual";
+                }
+              }
+
               return (
                 <button
                   key={r.id}
@@ -377,7 +420,7 @@ export default function AdminPricesManager() {
                       : "bg-slate-950/60 text-slate-400 hover:text-white border-slate-800 hover:border-slate-700"
                   }`}
                 >
-                  <span>{r.label}</span>
+                  <span>{label}</span>
                   <span
                     className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono ${
                       isSelected
@@ -385,7 +428,7 @@ export default function AdminPricesManager() {
                         : "bg-slate-800 text-slate-400"
                     }`}
                   >
-                    {r.badge}
+                    {badge}
                   </span>
                 </button>
               );
@@ -651,6 +694,18 @@ export default function AdminPricesManager() {
           </table>
         </div>
       </div>
+
+      {/* Modal para configurar mínimos de depósito y qué rangos exigen depósito */}
+      <AdminRulesModal
+        isOpen={rulesModalOpen}
+        onClose={() => setRulesModalOpen(false)}
+        initialRules={rules}
+        onSaved={(updatedRules) => {
+          setRules(updatedRules);
+          setSuccessMessage("Reglas de escalafón y montos mínimos de depósito actualizados con éxito");
+          setTimeout(() => setSuccessMessage(null), 4000);
+        }}
+      />
     </div>
   );
 }

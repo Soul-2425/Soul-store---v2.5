@@ -20,6 +20,7 @@ import {
   Eye,
   Sliders,
 } from "lucide-react";
+import AdminRulesModal, { ResellerRule } from "./AdminRulesModal";
 
 interface ResellerUser {
   id: string;
@@ -52,15 +53,6 @@ interface DepositRequest {
   usuario_whatsapp: string | null;
 }
 
-interface ResellerRule {
-  id: string;
-  rango: string;
-  deposito_minimo_usdt: number;
-  nombre_nivel: string;
-  beneficio_resumen: string | null;
-  activo: boolean;
-}
-
 export default function AdminResellersControl({
   onNavigateToPrices,
 }: {
@@ -70,6 +62,7 @@ export default function AdminResellersControl({
   const [resellers, setResellers] = useState<ResellerUser[]>([]);
   const [depositRequests, setDepositRequests] = useState<DepositRequest[]>([]);
   const [rules, setRules] = useState<ResellerRule[]>([]);
+  const [rulesModalOpen, setRulesModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("PENDIENTE");
   const [selectedProofUrl, setSelectedProofUrl] = useState<string | null>(null);
@@ -259,10 +252,20 @@ export default function AdminResellersControl({
 
       {/* Reglas de Escalafón Activas */}
       <div className="bg-slate-900/60 border border-slate-800 rounded-3xl p-5 shadow-lg">
-        <h3 className="text-xs font-black uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-2">
-          <Sliders className="w-4 h-4 text-amber-400" />
-          <span>Escalafón Oficial de Revendedores por Depósito Acumulado:</span>
-        </h3>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+          <h3 className="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center gap-2">
+            <Sliders className="w-4 h-4 text-amber-400" />
+            <span>Escalafón Oficial de Revendedores por Depósito Acumulado:</span>
+          </h3>
+          <button
+            type="button"
+            onClick={() => setRulesModalOpen(true)}
+            className="px-3.5 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 text-xs font-bold transition flex items-center gap-1.5 self-start sm:self-auto shadow-sm"
+          >
+            <Sliders className="w-3.5 h-3.5" />
+            <span>Editar Mínimos y Rangos</span>
+          </button>
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
           {rules.map((rule) => (
             <div
@@ -721,6 +724,20 @@ export default function AdminResellersControl({
           </div>
         </div>
       )}
+      {/* Modal para configurar mínimos de depósito y qué rangos exigen depósito */}
+      <AdminRulesModal
+        isOpen={rulesModalOpen}
+        onClose={() => setRulesModalOpen(false)}
+        initialRules={rules}
+        onSaved={(updatedRules) => {
+          setRules(updatedRules);
+          setNotification({
+            type: "success",
+            text: "Escalafón y montos mínimos de depósito actualizados con éxito",
+          });
+          setTimeout(() => setNotification(null), 4000);
+        }}
+      />
     </div>
   );
 }

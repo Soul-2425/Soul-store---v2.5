@@ -138,9 +138,10 @@ export async function POST(request: Request) {
       }
     }
 
-    // Si aún no califica pero tenía menos de 5 y ahora tiene >= 5: revendedor_4
-    if (nuevoTotalDepositado >= 5 && cliente.rango.startsWith("cliente_")) {
-      nuevoRango = "revendedor_4";
+    // Si aún no califica pero supera el umbral configurado de revendedor base (por defecto revendedor_4)
+    const baseRule = rules.find((r) => r.rango === "revendedor_4") || rules[rules.length - 1];
+    if (baseRule && nuevoTotalDepositado >= Number(baseRule.deposito_minimo_usdt) && cliente.rango.startsWith("cliente_")) {
+      nuevoRango = baseRule.rango;
     }
 
     await sql`

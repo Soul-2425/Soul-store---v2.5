@@ -64,6 +64,13 @@ export async function GET() {
       SELECT tasa_ves, tasa_mxn FROM public.tasas_cambio WHERE id = 1
     `;
 
+    // 7. Reglas de escalafón por depósito configuradas
+    const rules = await sql`
+      SELECT id, rango, deposito_minimo_usdt, nombre_nivel, beneficio_resumen, activo
+      FROM public.reglas_revendedor_escalafon
+      ORDER BY deposito_minimo_usdt ASC
+    `;
+
     return NextResponse.json({
       categories,
       subcategories,
@@ -71,6 +78,7 @@ export async function GET() {
       variants,
       overrides,
       rates: rates || { tasa_ves: 0, tasa_mxn: 0 },
+      rules: rules || [],
     });
   } catch (error: any) {
     console.error("Error al obtener precios admin:", error);
