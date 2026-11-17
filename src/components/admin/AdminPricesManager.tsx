@@ -90,10 +90,18 @@ const RANGOS_BASE = [
   { id: "revendedor_especial", nombreBase: "Revendedor Especial VIP", labelDefault: "Revendedor Especial VIP", tipo: "revendedor", badgeDefault: "VIP B2B" },
 ];
 
-export default function AdminPricesManager() {
+interface AdminPricesManagerProps {
+  initialRank?: string;
+  onNavigateToResellers?: () => void;
+}
+
+export default function AdminPricesManager({
+  initialRank,
+  onNavigateToResellers,
+}: AdminPricesManagerProps = {}) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [selectedRango, setSelectedRango] = useState<string>("revendedor_4");
+  const [selectedRango, setSelectedRango] = useState<string>(initialRank || "revendedor_4");
   const [categories, setCategories] = useState<Category[]>([]);
   const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -131,6 +139,12 @@ export default function AdminPricesManager() {
   useEffect(() => {
     loadPricesData();
   }, []);
+
+  useEffect(() => {
+    if (initialRank) {
+      setSelectedRango(initialRank);
+    }
+  }, [initialRank]);
 
   // Lista plana de items a configurar (productos y sus variantes)
   const flatItems = useMemo(() => {
@@ -322,7 +336,19 @@ export default function AdminPricesManager() {
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            {onNavigateToResellers && (
+              <button
+                type="button"
+                onClick={onNavigateToResellers}
+                className="px-3.5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-amber-400 hover:text-amber-300 font-bold text-xs flex items-center gap-2 border border-amber-500/30 transition shadow-sm"
+                title="Volver al Control de Revendedores"
+              >
+                <ShieldAlert className="w-4 h-4 text-amber-400 rotate-180" />
+                <span>← Volver a Revendedores</span>
+              </button>
+            )}
+
             <button
               type="button"
               onClick={() => setRulesModalOpen(true)}
@@ -700,6 +726,7 @@ export default function AdminPricesManager() {
         isOpen={rulesModalOpen}
         onClose={() => setRulesModalOpen(false)}
         initialRules={rules}
+        onNavigateToPrices={(rango) => setSelectedRango(rango)}
         onSaved={(updatedRules) => {
           setRules(updatedRules);
           setSuccessMessage("Reglas de escalafón y montos mínimos de depósito actualizados con éxito");

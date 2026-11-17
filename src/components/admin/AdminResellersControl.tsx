@@ -19,6 +19,9 @@ import {
   MessageCircle,
   Eye,
   Sliders,
+  Check,
+  ArrowRight,
+  Pencil,
 } from "lucide-react";
 import AdminRulesModal, { ResellerRule } from "./AdminRulesModal";
 
@@ -56,13 +59,15 @@ interface DepositRequest {
 export default function AdminResellersControl({
   onNavigateToPrices,
 }: {
-  onNavigateToPrices?: () => void;
+  onNavigateToPrices?: (rango?: string) => void;
 }) {
   const [loading, setLoading] = useState(true);
   const [resellers, setResellers] = useState<ResellerUser[]>([]);
   const [depositRequests, setDepositRequests] = useState<DepositRequest[]>([]);
   const [rules, setRules] = useState<ResellerRule[]>([]);
   const [rulesModalOpen, setRulesModalOpen] = useState(false);
+  const [editedMinDeposits, setEditedMinDeposits] = useState<{ [rango: string]: number }>({});
+  const [savingRuleRank, setSavingRuleRank] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("PENDIENTE");
   const [selectedProofUrl, setSelectedProofUrl] = useState<string | null>(null);
@@ -95,6 +100,60 @@ export default function AdminResellersControl({
   useEffect(() => {
     loadData();
   }, []);
+
+  // Manejo de edición rápida de depósito mínimo en las tarjetas de escalafón
+  const handleMinDepositChange = (rango: string, val: string) => {
+    const parsed = parseFloat(val);
+    setEditedMinDeposits((prev) => ({
+      ...prev,
+      [rango]: isNaN(parsed) ? 0 : parsed,
+    }));
+  };
+
+  const handleSaveInlineRule = async (rule: ResellerRule) => {
+    const nuevoMonto =
+      editedMinDeposits[rule.rango] !== undefined
+        ? editedMinDeposits[rule.rango]
+        : rule.deposito_minimo_usdt;
+    setSavingRuleRank(rule.rango);
+    try {
+      const res = await fetch("/api/admin/resellers/rules", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          rules: [
+            {
+              rango: rule.rango,
+              deposito_minimo_usdt: nuevoMonto,
+              nombre_nivel: rule.nombre_nivel,
+              beneficio_resumen: rule.beneficio_resumen,
+              activo: rule.activo,
+            },
+          ],
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error al actualizar depósito mínimo");
+
+      setRules((prev) =>
+        prev.map((r) => (r.rango === rule.rango ? { ...r, deposito_minimo_usdt: nuevoMonto } : r))
+      );
+      setNotification({
+        type: "success",
+        text: `Depósito mínimo para ${rule.nombre_nivel} actualizado a ${nuevoMonto} USDT con éxito`,
+      });
+      setTimeout(() => setNotification(null), 4000);
+      setEditedMinDeposits((prev) => {
+        const copy = { ...prev };
+        delete copy[rule.rango];
+        return copy;
+      });
+    } catch (err: any) {
+      setNotification({ type: "error", text: err.message || "Error al guardar regla" });
+    } finally {
+      setSavingRuleRank(null);
+    }
+  };
 
   // Aprobar o Rechazar Solicitud de Depósito
   const handleProcessDeposit = async (solicitudId: string, accion: "APROBAR" | "RECHAZAR") => {
@@ -204,7 +263,7 @@ export default function AdminResellersControl({
           {onNavigateToPrices && (
             <button
               type="button"
-              onClick={onNavigateToPrices}
+              onClick={() => onNavigateToPrices()}
               className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold text-xs flex items-center gap-2 border border-amber-500/30 transition shadow-sm"
             >
               <Coins className="w-4 h-4 text-amber-400" />
@@ -266,29 +325,111 @@ export default function AdminResellersControl({
             <span>Editar Mínimos y Rangos</span>
           </button>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
-          {rules.map((rule) => (
-            <div
-              key={rule.id}
-              className="p-3.5 rounded-2xl bg-black/40 border border-slate-800/80 flex flex-col justify-between"
-            >
-              <div>
-                <span className="text-[10px] font-mono font-bold text-amber-400 uppercase tracking-wider block">
-                  {rule.rango}
-                </span>
-                <h4 className="text-sm font-black text-white mt-0.5">{rule.nombre_nivel}</h4>
-                <p className="text-[11px] text-slate-400 mt-1 line-clamp-2">
-                  {rule.beneficio_resumen}
-                </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3.5">
+          {rules.map((rule) => {
+            const hasUnsavedDeposit =
+              editedMinDeposits[rule.rango] !== undefined &&
+              editedMinDeposits[rule.rango] !== rule.deposito_minimo_usdt;
+            const currentMinVal =
+              editedMinDeposits[rule.rango] !== undefined
+                ? editedMinDeposits[rule.rango]
+                : rule.deposito_minimo_usdt;
+
+            return (
+              <div
+                key={rule.id}
+                className={`p-4 rounded-2xl border flex flex-col justify-between transition relative overflow-hidden group shadow-lg ${
+                  rule.activo
+                    ? "bg-slate-950/70 border-slate-800 hover:border-amber-500/50"
+                    : "bg-slate-950/40 border-slate-900 opacity-60"
+                }`}
+              >
+                <div>
+                  <div className="flex items-center justify-between gap-1 mb-1">
+                    <span className="text-[10px] font-mono font-bold text-amber-400 uppercase tracking-wider">
+                      {rule.rango}
+                    </span>
+                    <span
+                      className={`text-[9px] px-1.5 py-0.5 rounded font-mono font-bold ${
+                        rule.activo
+                          ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                          : "bg-slate-800 text-slate-400"
+                      }`}
+                    >
+                      {rule.activo ? "Activo" : "Manual"}
+                    </span>
+                  </div>
+
+                  <h4 className="text-sm font-black text-white">{rule.nombre_nivel}</h4>
+                  <p className="text-[11px] text-slate-400 mt-1 line-clamp-2 min-h-[32px]">
+                    {rule.beneficio_resumen || "Tarifas y beneficios exclusivos del escalafón."}
+                  </p>
+                </div>
+
+                <div className="mt-4 pt-3 border-t border-white/5 space-y-2.5">
+                  {/* Editor de Depósito Mínimo */}
+                  <div>
+                    <div className="flex items-center justify-between text-[10px] text-slate-400 uppercase font-mono font-bold mb-1">
+                      <span>Mín. Depósito:</span>
+                      {hasUnsavedDeposit && (
+                        <span className="text-amber-400 font-sans normal-case text-[10px] animate-pulse">
+                          Sin guardar
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="relative flex-1 flex items-center">
+                        <span className="absolute left-2.5 text-xs font-bold text-[#FFF01F] pointer-events-none">
+                          ≥
+                        </span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          value={currentMinVal}
+                          onChange={(e) => handleMinDepositChange(rule.rango, e.target.value)}
+                          className="w-full pl-6 pr-11 py-1.5 rounded-xl bg-black/80 border border-slate-700 focus:border-amber-400 font-mono text-xs font-extrabold text-[#FFF01F] outline-none transition"
+                          title="Escribe el nuevo monto mínimo en USDT para este rango"
+                        />
+                        <span className="absolute right-2 text-[10px] font-mono text-slate-400 pointer-events-none">
+                          USDT
+                        </span>
+                      </div>
+
+                      {hasUnsavedDeposit && (
+                        <button
+                          type="button"
+                          disabled={savingRuleRank === rule.rango}
+                          onClick={() => handleSaveInlineRule(rule)}
+                          className="px-2 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs transition shadow-[0_0_10px_rgba(245,158,11,0.4)] flex items-center gap-1 shrink-0"
+                          title="Guardar nuevo mínimo de depósito"
+                        >
+                          {savingRuleRank === rule.rango ? (
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Check className="w-3.5 h-3.5" />
+                          )}
+                          <span className="text-[10px]">OK</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Botón para Configurar Precios del Rango */}
+                  <button
+                    type="button"
+                    onClick={() => onNavigateToPrices?.(rule.rango)}
+                    className="w-full py-2 px-2.5 rounded-xl bg-gradient-to-r from-amber-500/15 to-yellow-500/10 hover:from-amber-500/25 hover:to-yellow-500/20 text-amber-300 hover:text-white border border-amber-500/30 hover:border-amber-400/60 text-xs font-bold transition flex items-center justify-center gap-2 shadow-sm active:scale-95 group/btn"
+                    title={`Ir a ajustar precios de productos para ${rule.nombre_nivel}`}
+                  >
+                    <Coins className="w-3.5 h-3.5 text-yellow-400 group-hover/btn:scale-110 transition" />
+                    <span>Ajustar Precios</span>
+                    <ArrowRight className="w-3.5 h-3.5 text-amber-400 group-hover/btn:translate-x-1 transition" />
+                  </button>
+                </div>
               </div>
-              <div className="mt-3 pt-2 border-t border-white/5 flex items-center justify-between">
-                <span className="text-[10px] text-slate-500">Depósito Mínimo:</span>
-                <span className="text-xs font-mono font-extrabold text-[#FFF01F]">
-                  ≥ {Number(rule.deposito_minimo_usdt).toFixed(0)} USDT
-                </span>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -729,6 +870,7 @@ export default function AdminResellersControl({
         isOpen={rulesModalOpen}
         onClose={() => setRulesModalOpen(false)}
         initialRules={rules}
+        onNavigateToPrices={(rango) => onNavigateToPrices?.(rango)}
         onSaved={(updatedRules) => {
           setRules(updatedRules);
           setNotification({

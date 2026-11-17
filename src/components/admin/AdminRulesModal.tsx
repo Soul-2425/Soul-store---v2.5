@@ -42,11 +42,13 @@ export default function AdminRulesModal({
   onClose,
   initialRules = [],
   onSaved,
+  onNavigateToPrices,
 }: {
   isOpen: boolean;
   onClose: () => void;
   initialRules: ResellerRule[];
   onSaved: (updatedRules: ResellerRule[]) => void;
+  onNavigateToPrices?: (rango: string) => void;
 }) {
   const [localRules, setLocalRules] = useState<ResellerRule[]>([]);
   const [saving, setSaving] = useState(false);
@@ -239,6 +241,22 @@ export default function AdminRulesModal({
                       />
                       <span className="text-[10px] font-mono text-slate-400">USDT</span>
                     </div>
+
+                    {/* Botón para configurar precios del rango */}
+                    {onNavigateToPrices && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onClose();
+                          onNavigateToPrices(rule.rango);
+                        }}
+                        className="px-2.5 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[11px] font-bold flex items-center gap-1.5 transition shadow-sm"
+                        title="Abrir Gestor de Precios para este rango"
+                      >
+                        <Coins className="w-3.5 h-3.5 text-yellow-400" />
+                        <span>Precios</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -303,6 +321,22 @@ export default function AdminRulesModal({
                         />
                         <span className="text-[10px] font-mono text-slate-400">USDT</span>
                       </div>
+                    )}
+
+                    {/* Botón para configurar precios del rango cliente */}
+                    {onNavigateToPrices && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onClose();
+                          onNavigateToPrices(rule.rango);
+                        }}
+                        className="px-2.5 py-1.5 rounded-xl bg-fuchsia-500/10 hover:bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/30 text-[11px] font-bold flex items-center gap-1.5 transition shadow-sm"
+                        title="Abrir Gestor de Precios para este rango"
+                      >
+                        <Coins className="w-3.5 h-3.5 text-fuchsia-400" />
+                        <span>Precios</span>
+                      </button>
                     )}
                   </div>
                 </div>

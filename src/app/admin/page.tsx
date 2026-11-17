@@ -364,6 +364,7 @@ function RankPricingSection({
 
 export default function AdminDashboardPage() {
   const [activeTab, setActiveTab] = useState<"pedidos" | "feed" | "catalogo" | "precios" | "revendedores" | "pagos" | "finanzas" | "usuarios" | "tasas" | "boveda" | "notificaciones">("pedidos");
+  const [selectedPricesRank, setSelectedPricesRank] = useState<string>("revendedor_4");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [ordersPage, setOrdersPage] = useState(1);
   const [usersPage, setUsersPage] = useState(1);
@@ -374,6 +375,21 @@ export default function AdminDashboardPage() {
     if (typeof window !== "undefined") {
       window.history.pushState(null, '', `?tab=${tab}`);
     }
+  };
+
+  const handleNavigateToPricesRank = (rango?: string) => {
+    if (rango) {
+      setSelectedPricesRank(rango);
+      if (typeof window !== "undefined") {
+        window.history.pushState(null, '', `?tab=precios&rango=${rango}`);
+      }
+    } else {
+      if (typeof window !== "undefined") {
+        window.history.pushState(null, '', `?tab=precios`);
+      }
+    }
+    setActiveTab("precios");
+    setMobileNavOpen(false);
   };
 
   // Control de Acceso Exclusivo para Administradores
@@ -1696,6 +1712,10 @@ export default function AdminDashboardPage() {
       const validTabs = ["pedidos", "feed", "catalogo", "precios", "revendedores", "pagos", "finanzas", "usuarios", "tasas", "boveda", "notificaciones"];
       if (tabParam && validTabs.includes(tabParam)) {
         setActiveTab(tabParam as any);
+      }
+      const rankParam = urlParams.get("rango");
+      if (rankParam) {
+        setSelectedPricesRank(rankParam);
       }
       const orderIdParam = urlParams.get("order_id");
       if (orderIdParam) {
@@ -3619,7 +3639,10 @@ export default function AdminDashboardPage() {
         {/* ======================================================== */}
         {activeTab === "precios" && (
           <div className="animate-in fade-in duration-200">
-            <AdminPricesManager />
+            <AdminPricesManager
+              initialRank={selectedPricesRank}
+              onNavigateToResellers={() => handleNavigateTab("revendedores")}
+            />
           </div>
         )}
 
@@ -3628,7 +3651,9 @@ export default function AdminDashboardPage() {
         {/* ======================================================== */}
         {activeTab === "revendedores" && (
           <div className="animate-in fade-in duration-200">
-            <AdminResellersControl onNavigateToPrices={() => handleNavigateTab("precios")} />
+            <AdminResellersControl
+              onNavigateToPrices={(rango) => handleNavigateToPricesRank(rango)}
+            />
           </div>
         )}
 
