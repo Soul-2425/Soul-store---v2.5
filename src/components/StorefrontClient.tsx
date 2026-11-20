@@ -1004,12 +1004,13 @@ export default function StorefrontClient({
                   </Link>
                 )}
 
-                <div 
-                  className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#FF007F] to-[#FFF01F] flex items-center justify-center text-xs font-bold text-black border border-white/20 shadow-md cursor-pointer"
-                  title={`${currentUser.nickname} (${currentUser.rango})`}
+                <Link
+                  href="/feed?open_profile=true"
+                  className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#FF007F] to-[#FFF01F] flex items-center justify-center text-xs font-bold text-black border border-white/20 shadow-md cursor-pointer hover:scale-105 transition"
+                  title={`${currentUser.nickname} (${currentUser.rango}) - Ver Perfil / Canjear Código`}
                 >
                   {currentUser.nickname ? currentUser.nickname[0].toUpperCase() : "S"}
-                </div>
+                </Link>
 
                 <button
                   onClick={async () => {
@@ -1056,7 +1057,12 @@ export default function StorefrontClient({
           {/* Tarjeta de Perfil en Móvil (Botón S y Datos de Usuario) */}
           {currentUser && (
             <div className="mt-5 p-4 rounded-2xl bg-gradient-to-br from-white/10 via-white/5 to-transparent border border-white/15 flex items-center justify-between gap-3 shadow-xl">
-              <div className="flex items-center gap-3">
+              <Link
+                href="/feed?open_profile=true"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center gap-3 min-w-0 hover:opacity-80 transition"
+                title="Ver mi perfil y canjear código promocional"
+              >
                 <div 
                   className="w-11 h-11 rounded-full bg-gradient-to-tr from-[#FF007F] to-[#FFF01F] flex items-center justify-center text-sm font-black text-black border-2 border-white/30 shadow-lg shrink-0"
                 >
@@ -1068,7 +1074,7 @@ export default function StorefrontClient({
                     {currentUser.rango}
                   </span>
                 </div>
-              </div>
+              </Link>
               <button
                 onClick={async () => {
                   await supabase.auth.signOut();

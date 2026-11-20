@@ -52,7 +52,8 @@ import {
   Bell,
   MessageSquare,
   Heart,
-  Coins
+  Coins,
+  Gift
 } from "lucide-react";
 import ImageUploadInput from "@/components/ImageUploadInput";
 import DynamicFieldsBuilder, { DynamicFieldItem } from "@/components/DynamicFieldsBuilder";
@@ -60,6 +61,7 @@ import { subscribeCurrentDevice } from "@/components/PushNotificationManager";
 import { DEFAULT_NOTIFICATION_TEMPLATES, interpolateTemplate } from "@/utils/notifications-template";
 import AdminPricesManager from "@/components/admin/AdminPricesManager";
 import AdminResellersControl from "@/components/admin/AdminResellersControl";
+import AdminReferralsManager from "@/components/admin/AdminReferralsManager";
 
 interface Category {
   id: string;
@@ -363,13 +365,13 @@ function RankPricingSection({
 }
 
 export default function AdminDashboardPage() {
-  const [activeTab, setActiveTab] = useState<"pedidos" | "feed" | "catalogo" | "precios" | "revendedores" | "pagos" | "finanzas" | "usuarios" | "tasas" | "boveda" | "notificaciones">("pedidos");
+  const [activeTab, setActiveTab] = useState<"pedidos" | "feed" | "catalogo" | "precios" | "revendedores" | "referidos" | "pagos" | "finanzas" | "usuarios" | "tasas" | "boveda" | "notificaciones">("pedidos");
   const [selectedPricesRank, setSelectedPricesRank] = useState<string>("revendedor_4");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [ordersPage, setOrdersPage] = useState(1);
   const [usersPage, setUsersPage] = useState(1);
 
-  const handleNavigateTab = (tab: "pedidos" | "feed" | "catalogo" | "precios" | "revendedores" | "pagos" | "finanzas" | "usuarios" | "tasas" | "boveda" | "notificaciones") => {
+  const handleNavigateTab = (tab: "pedidos" | "feed" | "catalogo" | "precios" | "revendedores" | "referidos" | "pagos" | "finanzas" | "usuarios" | "tasas" | "boveda" | "notificaciones") => {
     setActiveTab(tab);
     setMobileNavOpen(false);
     if (typeof window !== "undefined") {
@@ -1709,7 +1711,7 @@ export default function AdminDashboardPage() {
     if (typeof window !== "undefined") {
       const urlParams = new URLSearchParams(window.location.search);
       const tabParam = urlParams.get("tab");
-      const validTabs = ["pedidos", "feed", "catalogo", "precios", "revendedores", "pagos", "finanzas", "usuarios", "tasas", "boveda", "notificaciones"];
+      const validTabs = ["pedidos", "feed", "catalogo", "precios", "revendedores", "referidos", "pagos", "finanzas", "usuarios", "tasas", "boveda", "notificaciones"];
       if (tabParam && validTabs.includes(tabParam)) {
         setActiveTab(tabParam as any);
       }
@@ -2577,6 +2579,7 @@ export default function AdminDashboardPage() {
             { id: "catalogo", label: "Gestor de Catálogo Dinámico", icon: Package },
             { id: "precios", label: "Gestor de Precios Multi-Rango", icon: Coins },
             { id: "revendedores", label: "Control de Revendedores B2B", icon: ShieldCheck },
+            { id: "referidos", label: "Referidos & Rangos", icon: Gift },
             { id: "finanzas", label: "Dashboard Financiero", icon: BarChart3 },
             { id: "usuarios", label: "Gestor de Usuarios", icon: Users },
             { id: "tasas", label: "Multidivisa & Suiche P2P", icon: DollarSign },
@@ -2728,6 +2731,18 @@ export default function AdminDashboardPage() {
               >
                 <ShieldCheck className="w-4 h-4 text-amber-400" />
                 <span>Control de Revendedores</span>
+              </button>
+
+              <button
+                onClick={() => handleNavigateTab("referidos")}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
+                  activeTab === "referidos"
+                    ? "bg-fuchsia-600 text-white shadow-glow"
+                    : "text-slate-400 hover:text-white glass-panel"
+                }`}
+              >
+                <Gift className="w-4 h-4 text-[#FFF01F]" />
+                <span>Referidos</span>
               </button>
             </>
           )}
@@ -3654,6 +3669,15 @@ export default function AdminDashboardPage() {
             <AdminResellersControl
               onNavigateToPrices={(rango) => handleNavigateToPricesRank(rango)}
             />
+          </div>
+        )}
+
+        {/* ======================================================== */}
+        {/* TAB REFERIDOS: CÓDIGOS DE REFERIDO & ASIGNACIÓN DE RANGO */}
+        {/* ======================================================== */}
+        {activeTab === "referidos" && (
+          <div className="animate-in fade-in duration-200">
+            <AdminReferralsManager />
           </div>
         )}
 

@@ -43,7 +43,9 @@ import {
   Bookmark,
   Tag,
   Globe,
-  ArrowRight
+  ArrowRight,
+  Gift,
+  Loader2
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import ImageUploadInput from "@/components/ImageUploadInput";
@@ -195,6 +197,8 @@ export default function FeedPage() {
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileMessage, setProfileMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [sendingResetPass, setSendingResetPass] = useState(false);
+  const [promoCode, setPromoCode] = useState("");
+  const [claimingPromo, setClaimingPromo] = useState(false);
 
   const supabase = createClient();
 
@@ -214,6 +218,13 @@ export default function FeedPage() {
               setPubNickname(data.user.nickname || data.user.nombre || "");
               setProfileNickname(data.user.nickname || "");
               setProfileAvatarUrl(data.user.avatar_url || "");
+
+              if (typeof window !== "undefined") {
+                const urlParams = new URLSearchParams(window.location.search);
+                if (urlParams.get("open_profile") === "true") {
+                  setProfileModalOpen(true);
+                }
+              }
             }
           }
         } else {
@@ -479,6 +490,40 @@ export default function FeedPage() {
       setProfileMessage({ type: "error", text: "Error de red al actualizar perfil" });
     } finally {
       setSavingProfile(false);
+    }
+  };
+
+  // Canjear código promocional de rango
+  const handleClaimPromoCode = async () => {
+    if (!promoCode.trim()) return;
+    setClaimingPromo(true);
+    setProfileMessage(null);
+    try {
+      const res = await fetch("/api/referrals/redeem", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ codigo: promoCode.trim() }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setProfileMessage({
+          type: "success",
+          text: `🎉 ¡Felicitaciones! Has sido asignado al rango: ${data.nombre_rango}`,
+        });
+        if (currentUser) {
+          setCurrentUser({ ...currentUser, rango: data.nuevo_rango });
+        }
+        setPromoCode("");
+      } else {
+        setProfileMessage({
+          type: "error",
+          text: data.error || "No se pudo canjear el código.",
+        });
+      }
+    } catch {
+      setProfileMessage({ type: "error", text: "Error de red al canjear código promocional" });
+    } finally {
+      setClaimingPromo(false);
     }
   };
 
@@ -1583,6 +1628,49 @@ export default function FeedPage() {
                   className="px-4 py-2.5 rounded-xl bg-[#FF007F] hover:bg-[#FF007F]/80 disabled:opacity-40 text-white font-bold text-xs transition shadow shrink-0"
                 >
                   {savingProfile ? "Guardando..." : "Guardar Cambios"}
+                </button>
+              </div>
+            </div>
+
+            {/* SECCIÓN: CÓDIGO PROMOCIONAL / ASIGNACIÓN DE RANGO */}
+            <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+                  <Gift className="w-4 h-4 text-amber-400" />
+                  <span>Código Promocional / Asignación de Rango:</span>
+                </label>
+                <span className="text-[10px] font-mono text-slate-400">
+                  Rango Actual: <strong className="text-white uppercase">{currentUser.rango || "cliente_4"}</strong>
+                </span>
+              </div>
+              <p className="text-[11px] text-zinc-400">
+                ¿Tienes un código exclusivo de revendedor o cliente VIP entregado por un admin? Ingrésalo aquí para subir de nivel al instante.
+              </p>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={promoCode}
+                  onChange={(e) => setPromoCode(e.target.value.toUpperCase().replace(/\s+/g, ""))}
+                  placeholder="Ej: SOUL-REV4-VIP"
+                  className="flex-1 px-3.5 py-2.5 rounded-xl bg-black/70 border border-amber-500/40 focus:border-amber-400 text-xs font-mono font-bold text-white uppercase outline-none placeholder-slate-600"
+                />
+                <button
+                  type="button"
+                  onClick={handleClaimPromoCode}
+                  disabled={claimingPromo || !promoCode.trim()}
+                  className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:brightness-110 active:scale-95 disabled:opacity-40 text-slate-950 font-black text-xs transition shadow shrink-0 flex items-center gap-1.5"
+                >
+                  {claimingPromo ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Canjeando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>Canjear Código</span>
+                    </>
+                  )}
                 </button>
               </div>
             </div>

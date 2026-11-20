@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Flame, Mail, Lock, User, Phone, Tag, ArrowRight, AlertCircle, Loader2, CheckCircle2 } from "lucide-react";
+import { Flame, Mail, Lock, User, Phone, Tag, ArrowRight, AlertCircle, Loader2, CheckCircle2, Gift } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
 export default function RegisterPage() {
@@ -15,6 +15,9 @@ export default function RegisterPage() {
   const [telefonoWhatsapp, setTelefonoWhatsapp] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [codigoReferido, setCodigoReferido] = useState("");
+  const [validatingCode, setValidatingCode] = useState(false);
+  const [codeInfo, setCodeInfo] = useState<{ valid: boolean; rango_asignado?: string; nombre_rango?: string; error?: string } | null>(null);
   
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
@@ -22,6 +25,49 @@ export default function RegisterPage() {
   const [success, setSuccess] = useState(false);
 
   const supabase = createClient();
+
+  // Leer si vino con enlace de invitación: ?codigo=SOUL-... o ?ref=SOUL-...
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const ref = params.get("codigo") || params.get("ref");
+      if (ref) {
+        const clean = ref.toUpperCase().trim();
+        setCodigoReferido(clean);
+        validateCode(clean);
+      }
+    }
+  }, []);
+
+  const validateCode = async (codeToTest: string) => {
+    const clean = codeToTest.trim().toUpperCase();
+    if (!clean) {
+      setCodeInfo(null);
+      return;
+    }
+    setValidatingCode(true);
+    try {
+      const res = await fetch("/api/referrals/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ codigo: clean }),
+      });
+      const data = await res.json();
+      if (res.ok && data.valid) {
+        setCodeInfo({
+          valid: true,
+          rango_asignado: data.rango_asignado,
+          nombre_rango: data.nombre_rango,
+        });
+      } else {
+        setCodeInfo({ valid: false, error: data.error || "Código promocional no válido" });
+      }
+    } catch {
+      setCodeInfo({ valid: false, error: "Error de conexión al validar código" });
+    } finally {
+      setValidatingCode(false);
+    }
+  };
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,9 +78,16 @@ export default function RegisterPage() {
       return;
     }
 
+    if (codigoReferido.trim() && codeInfo && !codeInfo.valid) {
+      setErrorMsg(`El código promocional no es válido: ${codeInfo.error}`);
+      return;
+    }
+
     setLoading(true);
 
     try {
+      const targetRango = codeInfo?.valid && codeInfo.rango_asignado ? codeInfo.rango_asignado : "cliente_4";
+
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -44,7 +97,7 @@ export default function RegisterPage() {
             apellido,
             nickname,
             telefono_whatsapp: telefonoWhatsapp,
-            rango: "cliente_4",
+            rango: targetRango,
           },
         },
       });
@@ -54,6 +107,22 @@ export default function RegisterPage() {
       // Autoiniciar sesión inmediatamente para que entre directo con sesión activa
       if (!data.session) {
         await supabase.auth.signInWithPassword({ email, password });
+      }
+
+      // Si ingresó código promocional válido, marcarlo como usado
+      if (codigoReferido.trim() && codeInfo?.valid) {
+        try {
+          await fetch("/api/referrals/redeem", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              codigo: codigoReferido.trim(),
+              user_id: data.user?.id,
+            }),
+          });
+        } catch (redeemErr) {
+          console.warn("Error al registrar canje de código:", redeemErr);
+        }
       }
 
       setSuccess(true);
@@ -290,6 +359,61 @@ export default function RegisterPage() {
                 }`}
               />
             </div>
+          </div>
+
+          {/* Código de Invitación / Referido para asignación directa de rango */}
+          <div className="pt-1">
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-mono text-amber-300 font-bold flex items-center gap-1.5">
+                <Gift className="w-3.5 h-3.5 text-amber-400" />
+                <span>CÓDIGO DE INVITACIÓN / REFERIDO (OPCIONAL)</span>
+              </label>
+              {validatingCode && (
+                <span className="text-[10px] font-mono text-amber-400 animate-pulse">Verificando...</span>
+              )}
+            </div>
+            <div className="relative">
+              <Gift className="w-4 h-4 absolute left-3 top-3 text-amber-400/70" />
+              <input
+                type="text"
+                value={codigoReferido}
+                onChange={(e) => {
+                  const val = e.target.value.toUpperCase().replace(/\s+/g, "");
+                  setCodigoReferido(val);
+                  if (val.length >= 6) {
+                    validateCode(val);
+                  } else {
+                    setCodeInfo(null);
+                  }
+                }}
+                placeholder="Ej: SOUL-REV4-VIP"
+                className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-slate-900/90 border border-amber-500/30 focus:border-amber-400 text-sm font-mono font-bold text-white placeholder-slate-600 outline-none uppercase transition shadow-inner"
+              />
+            </div>
+            {codeInfo && (
+              <div
+                className={`mt-1.5 p-2 rounded-xl text-xs font-bold flex items-center gap-1.5 border animate-in fade-in ${
+                  codeInfo.valid
+                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                    : "bg-rose-500/10 text-rose-400 border-rose-500/30"
+                }`}
+              >
+                {codeInfo.valid ? (
+                  <>
+                    <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-emerald-400" />
+                    <span>¡Código Válido! Te otorgará el rango: {codeInfo.nombre_rango}</span>
+                  </>
+                ) : (
+                  <>
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0 text-rose-400" />
+                    <span>{codeInfo.error}</span>
+                  </>
+                )}
+              </div>
+            )}
+            <span className="text-[10px] text-slate-500 mt-1 block">
+              Si un administrador te dio un código exclusivo de revendedor o cliente VIP, ingrésalo aquí.
+            </span>
           </div>
 
           <button
